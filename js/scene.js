@@ -10,12 +10,14 @@ import * as THREE from 'three';
 export function createScene() {
   const scene = new THREE.Scene();
 
+  // Camera — AR.js will override the projection matrix when in AR mode
   const camera = new THREE.PerspectiveCamera(
     70,
     window.innerWidth / window.innerHeight,
     0.01,
     20
   );
+  // Position only used in fallback 3D mode; AR.js controls camera in AR mode
   camera.position.set(0, 1, 3);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });

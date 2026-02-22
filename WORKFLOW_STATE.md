@@ -8,7 +8,7 @@
 | Field | Value |
 |---|---|
 | Phase | CONSTRUCT |
-| Current Task | Task 3 |
+| Current Task | Task 4 |
 | Status | NOT_STARTED |
 | Blocked By | — |
 | Conda Env | `stjohn` (must be active) |
@@ -21,7 +21,7 @@
 |---|---|---|
 | 1. Scaffold | ✅ DONE | Committed dcf59ae, pushed to GitHub |
 | 2. Three.js Scene | ✅ DONE | scene.js + app.js with test cube |
-| 3. AR + Marker | ⬜ NOT_STARTED | |
+| 3. AR + Marker | ✅ DONE | AR.js dynamic load, Hiro marker, anchor group |
 | 4. Point Cloud | ⬜ NOT_STARTED | |
 | 5. Glow | ⬜ NOT_STARTED | |
 | 6. Touch | ⬜ NOT_STARTED | Can parallel with 7 |
@@ -41,6 +41,8 @@
 | 4 | No build step | GitHub Pages static hosting, CDN-only deps | 2026-02-22 |
 | 5 | GitHub repo: SLab28/RCA_HIDDEN_2025 | App files in repo root, GitHub Pages from main branch | 2026-02-22 |
 | 6 | Windsurf rules in .windsurf/rules/ | Moved from root WINDSURF_RULE_*.md to proper location | 2026-02-22 |
+| 7 | AR.js (not native WebXR) | No flags needed, getUserMedia-based, QR→open→works | 2026-02-22 |
+| 8 | Point budget raised to ~650K | 389K tree + 259K flock subsampled, will profile in Task 9 | 2026-02-22 |
 
 ---
 
