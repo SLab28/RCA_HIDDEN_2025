@@ -140,8 +140,11 @@ function waitForUserTapAndStartAR() {
         await startWorldAR();
       } catch (err) {
         console.error('[HIDDEN] WebXR failed:', err);
-        setArStatus('AR start failed — showing fallback');
-        startFallbackMode();
+        console.error('[HIDDEN] Error name:', err.name);
+        console.error('[HIDDEN] Error message:', err.message);
+        console.error('[HIDDEN] Error stack:', err.stack);
+        setArStatus('WebXR failed: ' + (err.message || err.name || 'Unknown error'));
+        // Don't fallback - just show error
       } finally {
         resolve();
       }
@@ -221,35 +224,8 @@ function placeTree(hitPose) {
 }
 
 // ─────────────────────────────────────────────
-// Fallback: AR.js-only mode (no WebXR)
+// No fallback - WebXR required
 // ─────────────────────────────────────────────
-function startFallbackMode() {
-  console.log('[HIDDEN] Fallback: no WebXR, using 3D viewer');
-  // Hide all overlays
-  const overlay = ui.overlay();
-  if (overlay) overlay.classList.add('hidden');
-  const arOverlay = ui.arOverlay();
-  if (arOverlay) arOverlay.classList.add('hidden');
-
-  // Remove any existing tree from scene first
-  if (treeData && treeData.points && scene.children.includes(treeData.points)) {
-    scene.remove(treeData.points);
-    console.log('[HIDDEN] Removed existing tree in fallback mode');
-  }
-
-  if (treeData) {
-    treeData.points.position.set(0, 0, -3);
-    scene.add(treeData.points);
-    console.log('[HIDDEN] Added tree in fallback mode');
-  }
-
-  // Simple render loop
-  function animate() {
-    requestAnimationFrame(animate);
-    renderer.render(scene, camera);
-  }
-  animate();
-}
 
 async function startMarkerAnchoredMode() {
   console.log('[HIDDEN] Marker mode: AR.js continuous tracking');
@@ -268,7 +244,7 @@ async function startMarkerAnchoredMode() {
     ar = await startMarkerTracking(scene, camera, renderer);
   } catch (err) {
     console.error('[HIDDEN] Marker mode failed:', err);
-    startFallbackMode();
+    setArStatus('Marker mode failed: ' + err.message);
     return;
   }
 
@@ -313,7 +289,7 @@ async function init() {
   console.log(`[HIDDEN] WebXR supported: ${webxrOK}`);
 
   const requestedMode = MODE;
-  const runningMode = requestedMode === 'marker' ? 'marker' : (webxrOK ? 'webxr' : 'marker');
+  const runningMode = requestedMode === 'marker' ? 'marker' : 'webxr'; // Force WebXR
   initModeToggle(runningMode, webxrOK);
 
   if (runningMode === 'marker') {
@@ -322,8 +298,8 @@ async function init() {
   }
 
   if (!webxrOK) {
-    await startMarkerAnchoredMode();
-    return;
+    console.log('[HIDDEN] WebXR not supported, but trying anyway for emulator');
+    // Don't fallback - try WebXR anyway for emulator compatibility
   }
 
   // Phase 1: AR.js marker detection

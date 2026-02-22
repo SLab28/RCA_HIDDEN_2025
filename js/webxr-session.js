@@ -15,11 +15,28 @@ let _currentHitPose = null;
  * @returns {Promise<boolean>}
  */
 export async function isWebXRSupported() {
-  if (!navigator.xr) return false;
-  try {
-    return await navigator.xr.isSessionSupported('immersive-ar');
-  } catch {
+  console.log('[WebXR] Checking support...');
+  console.log('[WebXR] navigator.xr exists:', !!navigator.xr);
+  
+  if (!navigator.xr) {
+    console.log('[WebXR] No navigator.xr found');
     return false;
+  }
+  
+  try {
+    const supported = await navigator.xr.isSessionSupported('immersive-ar');
+    console.log('[WebXR] immersive-ar supported:', supported);
+    
+    // For emulators, also check if requestSession is available
+    const canRequest = typeof navigator.xr.requestSession === 'function';
+    console.log('[WebXR] requestSession available:', canRequest);
+    
+    // Return true if either is supported (some emulators might not report correctly)
+    return supported || canRequest;
+  } catch (err) {
+    console.warn('[WebXR] Support check failed:', err);
+    // Still return true if requestSession exists (for emulator compatibility)
+    return typeof navigator.xr.requestSession === 'function';
   }
 }
 
@@ -29,20 +46,20 @@ export async function isWebXRSupported() {
  * @returns {THREE.LineSegments}
  */
 function createReticle(size = 0.35) {
-  // Create a simple ring reticle like the examples
-  const geometry = new THREE.RingGeometry(size * 0.8, size, 32);
-  const material = new THREE.MeshBasicMaterial({ 
+  // Create a square wireframe reticle
+  const geometry = new THREE.PlaneGeometry(size, size);
+  const edges = new THREE.EdgesGeometry(geometry);
+  const material = new THREE.LineBasicMaterial({ 
     color: 0xffffff, 
-    side: THREE.DoubleSide,
-    transparent: true,
-    opacity: 0.7
+    linewidth: 3
   });
-  const reticle = new THREE.Mesh(geometry, material);
+  const reticle = new THREE.LineSegments(edges, material);
   reticle.name = 'placement-reticle';
   reticle.rotateX(-Math.PI / 2); // flat on floor
   reticle.frustumCulled = false;
   reticle.visible = false;
-  console.log('[WebXR] Created ring reticle, size:', size);
+  console.log('[WebXR] Created square wireframe reticle, size:', size);
+  geometry.dispose(); // edges cloned it
   return reticle;
 }
 
@@ -61,9 +78,9 @@ export async function startWebXRSession(renderer, scene, camera, callbacks = {})
   const arOverlay = document.getElementById('ar-overlay');
   const arStatus = document.getElementById('ar-status');
 
-  // Build feature lists
+  // Build feature lists with reference space negotiation
   const requiredFeatures = ['hit-test'];
-  const optionalFeatures = ['dom-overlay'];
+  const optionalFeatures = ['dom-overlay', 'local-floor', 'local', 'viewer'];
   const sessionInit = {
     requiredFeatures,
     optionalFeatures,
@@ -76,8 +93,18 @@ export async function startWebXRSession(renderer, scene, camera, callbacks = {})
 
   // Request session
   console.log('[WebXR] Requesting immersive-ar session…');
-  xrSession = await navigator.xr.requestSession('immersive-ar', sessionInit);
-  console.log('[WebXR] Session started');
+  console.log('[WebXR] Session init:', sessionInit);
+  
+  try {
+    xrSession = await navigator.xr.requestSession('immersive-ar', sessionInit);
+    console.log('[WebXR] Session started successfully');
+    console.log('[WebXR] Session environment integration:', xrSession.environmentIntegration);
+  } catch (err) {
+    console.error('[WebXR] Session request failed:', err);
+    console.log('[WebXR] Error name:', err.name);
+    console.log('[WebXR] Error message:', err.message);
+    throw err;
+  }
 
   // Show DOM overlay
   if (arOverlay) arOverlay.classList.remove('hidden');
@@ -89,15 +116,37 @@ export async function startWebXRSession(renderer, scene, camera, callbacks = {})
   // Bind session to Three.js renderer
   await renderer.xr.setSession(xrSession);
 
-  // Reference spaces — try 'local-floor' first (better Y=floor), fall back to 'local'
+  // Reference spaces - use viewer space for emulator compatibility
+  let viewerSpace;
   try {
-    referenceSpace = await xrSession.requestReferenceSpace('local-floor');
-    console.log('[WebXR] Using local-floor reference space');
-  } catch {
-    referenceSpace = await xrSession.requestReferenceSpace('local');
-    console.log('[WebXR] Using local reference space');
+    viewerSpace = await xrSession.requestReferenceSpace('viewer');
+    console.log('[WebXR] Viewer reference space created');
+  } catch (err) {
+    console.error('[WebXR] Failed to create viewer space:', err);
+    throw err;
   }
-  const viewerSpace = await xrSession.requestReferenceSpace('viewer');
+
+  // Get reference space with fallback logic for emulator compatibility
+  async function getReferenceSpace(session) {
+    const types = ['local-floor', 'local', 'viewer']; // in order of preference
+    for (const type of types) {
+      try {
+        const refSpace = await session.requestReferenceSpace(type);
+        console.log('[WebXR] Using reference space:', type);
+        return refSpace;
+      } catch (e) {
+        console.warn('[WebXR] Reference space not supported:', type, e.name);
+      }
+    }
+    throw new Error('No supported reference space found');
+  }
+
+  try {
+    referenceSpace = await getReferenceSpace(xrSession);
+  } catch (err) {
+    console.error('[WebXR] Failed to get any reference space:', err);
+    throw err;
+  }
 
   // Hit-test source (ray from screen centre)
   try {
