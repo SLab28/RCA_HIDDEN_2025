@@ -153,6 +153,21 @@ async function startWorldAR() {
   console.log('[HIDDEN] Starting WebXR…');
   setArStatus('Starting AR…');
 
+  // Reset tree state for clean WebXR session
+  treePlaced = false;
+  if (treeData && treeData.points) {
+    const wasInScene = scene.children.includes(treeData.points);
+    if (wasInScene) {
+      scene.remove(treeData.points);
+      console.log('[HIDDEN] Removed existing tree from scene before WebXR');
+    }
+    // Reset tree position to origin
+    treeData.points.position.set(0, 0, 0);
+    treeData.points.quaternion.set(0, 0, 0, 1);
+    treeData.points.scale.set(1, 1, 1);
+    console.log('[HIDDEN] Reset tree transform for WebXR');
+  }
+
   await startWebXRSession(renderer, scene, camera, {
     onPlace: (hitPose) => {
       placeTree(hitPose);
@@ -173,8 +188,12 @@ async function startWorldAR() {
 // Place tree at hit-test position
 // ─────────────────────────────────────────────
 function placeTree(hitPose) {
-  if (treePlaced || !treeData) return;
+  if (treePlaced || !treeData) {
+    console.log('[HIDDEN] placeTree skipped - treePlaced:', treePlaced, 'treeData exists:', !!treeData);
+    return;
+  }
   treePlaced = true;
+  console.log('[HIDDEN] Placing tree at hit pose');
 
   const { points } = treeData;
 
@@ -186,6 +205,7 @@ function placeTree(hitPose) {
   );
 
   scene.add(points);
+  console.log('[HIDDEN] Tree added to scene, total children:', scene.children.length);
 
   // Stop hit-testing
   stopHitTest();
@@ -211,9 +231,16 @@ function startFallbackMode() {
   const arOverlay = ui.arOverlay();
   if (arOverlay) arOverlay.classList.add('hidden');
 
+  // Remove any existing tree from scene first
+  if (treeData && treeData.points && scene.children.includes(treeData.points)) {
+    scene.remove(treeData.points);
+    console.log('[HIDDEN] Removed existing tree in fallback mode');
+  }
+
   if (treeData) {
     treeData.points.position.set(0, 0, -3);
     scene.add(treeData.points);
+    console.log('[HIDDEN] Added tree in fallback mode');
   }
 
   // Simple render loop

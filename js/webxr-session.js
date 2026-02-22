@@ -29,19 +29,20 @@ export async function isWebXRSupported() {
  * @returns {THREE.LineSegments}
  */
 function createReticle(size = 0.35) {
-  const plane = new THREE.PlaneGeometry(size, size);
+  // Create a simple ring reticle like the examples
+  const geometry = new THREE.RingGeometry(size * 0.8, size, 32);
   const material = new THREE.MeshBasicMaterial({ 
     color: 0xffffff, 
     side: THREE.DoubleSide,
     transparent: true,
-    opacity: 0.8
+    opacity: 0.7
   });
-  const reticle = new THREE.Mesh(plane, material);
+  const reticle = new THREE.Mesh(geometry, material);
   reticle.name = 'placement-reticle';
   reticle.rotateX(-Math.PI / 2); // flat on floor
   reticle.frustumCulled = false;
   reticle.visible = false;
-  console.log('[WebXR] Created solid plane reticle, size:', size);
+  console.log('[WebXR] Created ring reticle, size:', size);
   return reticle;
 }
 
@@ -165,21 +166,21 @@ export async function startWebXRSession(renderer, scene, camera, callbacks = {})
             console.log('[WebXR] First hit-test result, showing reticle');
           }
           _reticle.visible = true;
+          
+          // Simple position setting - the ring is already flat on floor
           _reticle.position.set(
             pose.transform.position.x,
             pose.transform.position.y,
             pose.transform.position.z
           );
-          // Align reticle with surface normal (hit-test orientation)
+          
+          // Use the hit pose orientation directly (ring is already rotated flat)
           _reticle.quaternion.set(
             pose.transform.orientation.x,
             pose.transform.orientation.y,
             pose.transform.orientation.z,
             pose.transform.orientation.w
           );
-          // Apply -90° X rotation to lay flat on the surface
-          const rot = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
-          _reticle.quaternion.multiplyQuaternions(rot, _reticle.quaternion);
 
           _currentHitPose = {
             position: pose.transform.position,
