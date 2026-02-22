@@ -1,0 +1,29 @@
+# Reference images (large, not needed in deploy)
+*.jpg
+*.png
+!assets/**/*.png
+!assets/**/*.jpg
+
+# Large point cloud source files (keep in assets/ only if needed)
+*.las
+# Note: .ply files in assets/ ARE tracked for deployment
+*.ply
+!assets/**/*.ply
+
+# OS
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# IDE
+.vscode/
+*.swp
+*.swo
+
+# Windsurf plans (local only)
+.windsurf/plans/
