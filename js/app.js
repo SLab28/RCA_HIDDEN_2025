@@ -15,6 +15,7 @@ import {
   stopHitTest,
   requestWakeLock,
 } from './webxr-session.js';
+import { FloatingAnimation } from './floating-animation.js';
 
 console.log('[HIDDEN] AR app initialising');
 
@@ -26,6 +27,7 @@ const MODE = new URLSearchParams(window.location.search).get('mode') || 'auto';
 let scene, camera, renderer;
 let treeData = null;
 let treePlaced = false;
+let floatingAnimation = null;
 
 // --- UI helpers ---
 const ui = {
@@ -210,6 +212,17 @@ function placeTree(hitPose) {
   scene.add(points);
   console.log('[HIDDEN] Tree added to scene, total children:', scene.children.length);
 
+  // Initialize floating animation after a short delay to prevent blocking
+  setTimeout(() => {
+    try {
+      floatingAnimation = new FloatingAnimation(points);
+      floatingAnimation.start();
+      console.log('[HIDDEN] Floating animation initialized - will start in 3s with fade-in');
+    } catch (err) {
+      console.error('[HIDDEN] Failed to initialize floating animation:', err);
+    }
+  }, 100); // 100ms delay
+
   // Stop hit-testing
   stopHitTest();
 
@@ -257,10 +270,28 @@ async function startMarkerAnchoredMode() {
   function animate() {
     requestAnimationFrame(animate);
     ar.update();
+    
+    // Update floating animation
+    if (floatingAnimation) {
+      floatingAnimation.update();
+    }
+    
     renderer.render(scene, camera);
   }
   animate();
 }
+
+// ─────────────────────────────────────────────
+// Global animation update
+// ─────────────────────────────────────────────
+function updateAnimations() {
+  if (floatingAnimation) {
+    floatingAnimation.update();
+  }
+}
+
+// Make globally available for WebXR render loop
+window.updateAnimations = updateAnimations;
 
 // ─────────────────────────────────────────────
 // Main init
