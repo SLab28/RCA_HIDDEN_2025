@@ -61,7 +61,7 @@ function animate() {
   requestAnimationFrame(animate);
 
   // Update AR tracking each frame
-  updateAR(renderer);
+  updateAR();
 
   // Rotate test cube
   if (testCube) {

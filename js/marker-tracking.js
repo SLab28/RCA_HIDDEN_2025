@@ -3,10 +3,12 @@
 
 import * as THREE from 'three';
 
-const AR_JS_URL = 'https://raw.githack.com/AR-js-org/AR.js/3.4.5/three.js/build/ar-threex.js';
+const AR_JS_URL = 'https://raw.githack.com/AR-js-org/AR.js/master/three.js/build/ar-threex.js';
+const CAMERA_PARAM_URL = 'https://raw.githack.com/AR-js-org/AR.js/master/data/data/camera_para.dat';
 
 let arToolkitSource = null;
 let arToolkitContext = null;
+let _anchorGroup = null;
 let markerFound = false;
 
 /**
@@ -34,7 +36,7 @@ function loadARjs() {
 function onResize(renderer) {
   arToolkitSource.onResizeElement();
   arToolkitSource.copyElementSizeTo(renderer.domElement);
-  if (arToolkitContext.arController !== null) {
+  if (arToolkitContext && arToolkitContext.arController !== null) {
     arToolkitSource.copyElementSizeTo(arToolkitContext.arController.canvas);
   }
 }
@@ -51,12 +53,19 @@ export async function initMarkerTracking(scene, camera, renderer) {
 
   /* global THREEx */
 
+  // Reset camera for AR.js — it manages the projection matrix
+  camera.position.set(0, 0, 0);
+  camera.lookAt(0, 0, 0);
+
   // ArToolkitSource — webcam
   arToolkitSource = new THREEx.ArToolkitSource({ sourceType: 'webcam' });
 
-  arToolkitSource.init(function onReady() {
-    console.log('[AR] ArToolkitSource ready');
-    onResize(renderer);
+  await new Promise((resolve) => {
+    arToolkitSource.init(function onReady() {
+      console.log('[AR] ArToolkitSource ready');
+      onResize(renderer);
+      resolve();
+    });
   });
 
   window.addEventListener('resize', () => {
@@ -65,30 +74,30 @@ export async function initMarkerTracking(scene, camera, renderer) {
 
   // ArToolkitContext — marker detection engine
   arToolkitContext = new THREEx.ArToolkitContext({
-    cameraParametersUrl: THREEx.ArToolkitContext.baseURL + 'data/camera_para.dat',
+    cameraParametersUrl: CAMERA_PARAM_URL,
     detectionMode: 'mono',
   });
 
-  arToolkitContext.init(function onCompleted() {
-    console.log('[AR] ArToolkitContext initialised');
-    // Copy projection matrix from AR.js to our Three.js camera
-    camera.projectionMatrix.copy(arToolkitContext.getProjectionMatrix());
+  await new Promise((resolve) => {
+    arToolkitContext.init(function onCompleted() {
+      console.log('[AR] ArToolkitContext initialised');
+      camera.projectionMatrix.copy(arToolkitContext.getProjectionMatrix());
+      resolve();
+    });
   });
 
   // Anchor group — all AR content parents to this
   const anchorGroup = new THREE.Group();
   anchorGroup.name = 'ar-anchor';
   scene.add(anchorGroup);
+  _anchorGroup = anchorGroup;
 
   // ArMarkerControls — custom pattern marker
-  const markerControls = new THREEx.ArMarkerControls(arToolkitContext, anchorGroup, {
+  new THREEx.ArMarkerControls(arToolkitContext, anchorGroup, {
     type: 'pattern',
     patternUrl: 'assets/position_marker.patt',
     changeMatrixMode: 'modelViewMatrix',
   });
-
-  // Marker found/lost detection
-  anchorGroup.visible = false;
 
   console.log('[AR] Marker tracking initialised (custom pattern: position_marker.patt)');
 
@@ -97,16 +106,23 @@ export async function initMarkerTracking(scene, camera, renderer) {
 
 /**
  * Call once per frame to update AR tracking.
- * @param {THREE.WebGLRenderer} renderer
  */
-export function updateAR(renderer) {
+export function updateAR() {
   if (!arToolkitSource || !arToolkitSource.ready) return;
 
   arToolkitContext.update(arToolkitSource.domElement);
 
-  // The anchor group's .visible is managed by ArMarkerControls internally,
-  // but we also track state for logging
-  // AR.js sets the markerRoot visible/invisible automatically via matrixAutoUpdate
+  // Manually track marker visibility via the anchor group's matrix
+  if (_anchorGroup) {
+    const wasFound = markerFound;
+    // AR.js sets the object visible when marker is detected
+    markerFound = _anchorGroup.visible;
+    if (markerFound && !wasFound) {
+      console.log('[AR] Marker FOUND');
+    } else if (!markerFound && wasFound) {
+      console.log('[AR] Marker LOST');
+    }
+  }
 }
 
 /**
