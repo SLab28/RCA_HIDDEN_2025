@@ -1,17 +1,9 @@
-# HIDDEN — AR Point Cloud Experience
+# RCA HIDDEN 2025
 
-An augmented reality browser experience for the **HIDDEN** exhibition at the Royal College of Art.
+St.John Tree (& the Forest Sanctuary)
 
-## Overview
+Contribution to the staff HIDDEN exhibition at the Royal College of Art.
 
-Visitors point their Android phone at a floor marker and see a coloured point-cloud tree rendered in AR. The tree responds to touch (fluid displacement), slowly dissolves when idle, and is surrounded by an audio-reactive flock of particles driven by ambient sound.
-
-## Tech Stack
-
-- **Three.js r160+** — 3D rendering (ES modules via CDN)
-- **WebXR / AR.js** — augmented reality & marker tracking
-- **Web Audio API** — microphone FFT for flock behaviour
-- **GitHub Pages** — static hosting
 
 ## Local Development
 
