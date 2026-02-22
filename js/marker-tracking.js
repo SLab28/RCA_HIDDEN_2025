@@ -13,6 +13,7 @@ const CAMERA_PARAM_URL = 'https://raw.githack.com/AR-js-org/AR.js/master/data/da
 let arToolkitSource = null;
 let arToolkitContext = null;
 let _animFrameId = null;
+let _resizeHandler = null;
 
 /**
  * Dynamically load AR.js (ar-threex.js).
@@ -76,9 +77,21 @@ export async function waitForMarkerDetection(renderer) {
       video.style.height = '100vh';
       video.style.objectFit = 'cover';
       video.style.zIndex = '0';
+
+      // AR.js needs correct sizing for reliable detection
+      arToolkitSource.onResizeElement();
       resolve();
     });
   });
+
+  _resizeHandler = () => {
+    if (!arToolkitSource) return;
+    arToolkitSource.onResizeElement();
+    if (arToolkitContext && arToolkitContext.arController) {
+      arToolkitSource.copyElementSizeTo(arToolkitContext.arController.canvas);
+    }
+  };
+  window.addEventListener('resize', _resizeHandler);
 
   // ArToolkitContext — marker detection engine (needs a dummy camera for projection)
   const arCamera = new THREE.PerspectiveCamera();
@@ -91,6 +104,9 @@ export async function waitForMarkerDetection(renderer) {
     arToolkitContext.init(function onCompleted() {
       console.log('[AR.js] ArToolkit context ready');
       arCamera.projectionMatrix.copy(arToolkitContext.getProjectionMatrix());
+
+      // Sync internal ARToolkit canvas sizes (critical on desktop webcams)
+      if (_resizeHandler) _resizeHandler();
       resolve();
     });
   });
@@ -145,6 +161,11 @@ function cleanupARjs() {
     _animFrameId = null;
   }
 
+  if (_resizeHandler) {
+    window.removeEventListener('resize', _resizeHandler);
+    _resizeHandler = null;
+  }
+
   // Stop and remove the video element AR.js created
   if (arToolkitSource && arToolkitSource.domElement) {
     const video = arToolkitSource.domElement;
@@ -157,4 +178,71 @@ function cleanupARjs() {
 
   arToolkitSource = null;
   arToolkitContext = null;
+}
+
+export async function startMarkerTracking(scene, camera, renderer) {
+  await loadARjs();
+
+  /* global THREEx */
+
+  camera.position.set(0, 0, 0);
+  camera.lookAt(0, 0, 0);
+
+  arToolkitSource = new THREEx.ArToolkitSource({ sourceType: 'webcam' });
+
+  await new Promise((resolve) => {
+    arToolkitSource.init(function onReady() {
+      console.log('[AR.js] Camera ready (marker mode)');
+
+      const video = arToolkitSource.domElement;
+      video.style.position = 'fixed';
+      video.style.top = '0';
+      video.style.left = '0';
+      video.style.width = '100vw';
+      video.style.height = '100vh';
+      video.style.objectFit = 'cover';
+      video.style.zIndex = '0';
+
+      onResize(renderer);
+      resolve();
+    });
+  });
+
+  _resizeHandler = () => onResize(renderer);
+  window.addEventListener('resize', _resizeHandler);
+
+  arToolkitContext = new THREEx.ArToolkitContext({
+    cameraParametersUrl: CAMERA_PARAM_URL,
+    detectionMode: 'mono',
+  });
+
+  await new Promise((resolve) => {
+    arToolkitContext.init(function onCompleted() {
+      console.log('[AR.js] ArToolkit context ready (marker mode)');
+      camera.projectionMatrix.copy(arToolkitContext.getProjectionMatrix());
+      resolve();
+    });
+  });
+
+  const anchorGroup = new THREE.Group();
+  anchorGroup.name = 'ar-anchor';
+  scene.add(anchorGroup);
+
+  new THREEx.ArMarkerControls(arToolkitContext, anchorGroup, {
+    type: 'pattern',
+    patternUrl: 'assets/position_marker.patt',
+    changeMatrixMode: 'modelViewMatrix',
+  });
+
+  const update = () => {
+    if (!arToolkitSource || !arToolkitSource.ready) return;
+    arToolkitContext.update(arToolkitSource.domElement);
+  };
+
+  const dispose = () => {
+    cleanupARjs();
+    if (anchorGroup.parent) anchorGroup.parent.remove(anchorGroup);
+  };
+
+  return { anchorGroup, update, dispose };
 }

@@ -8,7 +8,7 @@
 import * as THREE from 'three';
 import { createScene } from './scene.js';
 import { loadPointCloud } from './point-cloud-loader.js';
-import { waitForMarkerDetection } from './marker-tracking.js';
+import { startMarkerTracking, waitForMarkerDetection } from './marker-tracking.js';
 import {
   isWebXRSupported,
   startWebXRSession,
@@ -20,6 +20,8 @@ console.log('[HIDDEN] AR app initialising');
 
 const TREE_PLY_URL = 'assets/St_John_Tree_point_cloud_niagara_yup_green_4k_points.ply';
 const TREE_FOOTPRINT_M = 2.0; // tree base always fills 2 × 2 m (real-world metres)
+
+const MODE = new URLSearchParams(window.location.search).get('mode') || 'auto';
 
 let scene, camera, renderer;
 let treeData = null;
@@ -43,6 +45,32 @@ function setLoadingText(msg) {
 function setArStatus(msg) {
   const el = ui.arStatus();
   if (el) el.textContent = msg;
+}
+
+function initModeToggle(runningMode, webxrSupported) {
+  const btn = document.getElementById('mode-toggle-btn');
+  if (!btn) return;
+
+  btn.textContent = runningMode === 'marker' ? 'Marker' : 'WebXR';
+
+  if (!webxrSupported) {
+    btn.title = 'WebXR immersive-ar not supported on this device';
+    btn.disabled = true;
+    btn.style.opacity = '0.6';
+    btn.onclick = null;
+    return;
+  }
+
+  btn.disabled = false;
+  btn.style.opacity = '1';
+  btn.title = '';
+
+  btn.onclick = () => {
+    const next = runningMode === 'marker' ? 'webxr' : 'marker';
+    const url = new URL(window.location.href);
+    url.searchParams.set('mode', next);
+    window.location.href = url.toString();
+  };
 }
 
 // ─────────────────────────────────────────────
@@ -217,6 +245,76 @@ function startFallbackMode() {
   animate();
 }
 
+async function startMarkerAnchoredMode() {
+  console.log('[HIDDEN] Marker mode: AR.js continuous tracking');
+
+  const overlay = ui.overlay();
+  if (overlay) overlay.classList.add('hidden');
+
+  const arOverlay = ui.arOverlay();
+  if (arOverlay) arOverlay.classList.remove('hidden');
+  const btn = ui.startBtn();
+  if (btn) btn.classList.add('hidden');
+  setArStatus('Point camera at the marker');
+
+  let ar;
+  try {
+    ar = await startMarkerTracking(scene, camera, renderer);
+  } catch (err) {
+    console.error('[HIDDEN] Marker mode failed:', err);
+    startFallbackMode();
+    return;
+  }
+
+  if (treeData && treeData.points) {
+    ar.anchorGroup.add(treeData.points);
+  }
+
+  function animate() {
+    requestAnimationFrame(animate);
+    ar.update();
+    renderer.render(scene, camera);
+  }
+  animate();
+}
+
+// ─────────────────────────────────────────────
+// Desktop fallback: AR.js marker mode (no WebXR)
+// ─────────────────────────────────────────────
+async function startDesktopMarkerMode() {
+  console.log('[HIDDEN] Desktop mode: AR.js marker tracking (no WebXR immersive-ar)');
+
+  const overlay = ui.overlay();
+  if (overlay) overlay.classList.add('hidden');
+
+  const arOverlay = ui.arOverlay();
+  if (arOverlay) arOverlay.classList.remove('hidden');
+  const btn = ui.startBtn();
+  if (btn) btn.classList.add('hidden');
+  setArStatus('Desktop mode — point camera at the marker');
+
+  let ar;
+  try {
+    ar = await startMarkerTracking(scene, camera, renderer);
+  } catch (err) {
+    console.error('[HIDDEN] Desktop marker mode failed:', err);
+    startFallbackMode();
+    return;
+  }
+
+  if (treeData && treeData.points) {
+    // Attach to marker anchor group (AR.js coordinates)
+    ar.anchorGroup.add(treeData.points);
+  }
+
+  function animate() {
+    requestAnimationFrame(animate);
+    ar.update();
+    renderer.render(scene, camera);
+  }
+  animate();
+}
+
 // ─────────────────────────────────────────────
 // Main init
 // ─────────────────────────────────────────────
@@ -243,10 +341,22 @@ async function init() {
   const webxrOK = await isWebXRSupported();
   console.log(`[HIDDEN] WebXR supported: ${webxrOK}`);
 
-  if (!webxrOK) {
-    // No WebXR — fallback to simple 3D viewer
-    startFallbackMode();
+  const requestedMode = MODE;
+  const runningMode = requestedMode === 'marker' ? 'marker' : (webxrOK ? 'webxr' : 'marker');
+  initModeToggle(runningMode, webxrOK);
+
+  if (runningMode === 'marker') {
+    await startMarkerAnchoredMode();
     return;
+  }
+
+  if (!webxrOK) {
+    await startMarkerAnchoredMode();
+    return;
+  }
+
+  if (runningMode === 'webxr') {
+    // continue to WebXR flow
   }
 
   // Phase 1: AR.js marker detection
@@ -258,7 +368,12 @@ async function init() {
 
   // User gesture gate — WebXR requestSession requires a tap on Chrome Android.
   // We start Phase 2 directly inside the click handler to preserve activation.
-  await waitForUserTapAndStartAR();
+  try {
+    await waitForUserTapAndStartAR();
+  } catch (err) {
+    console.error('[HIDDEN] WebXR failed (tap/start):', err);
+    await startMarkerAnchoredMode();
+  }
 }
 
 // Wait for DOM ready
