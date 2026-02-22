@@ -42,7 +42,7 @@ video {
   margin-top: 0.5rem;
 }
 
-/* --- Phase 2: WebXR DOM overlay --- */
+/* --- Phase 1+2: AR overlay --- */
 .ar-overlay {
   position: fixed;
   inset: 0;
@@ -54,6 +54,13 @@ video {
   z-index: 10;
 }
 
+.ar-overlay-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
 .ar-status {
   background: rgba(0, 0, 0, 0.6);
   padding: 0.75rem 1.5rem;
@@ -62,6 +69,25 @@ video {
   text-align: center;
   pointer-events: auto;
   transition: opacity 0.5s ease;
+}
+
+.ar-start-btn {
+  background: #fff;
+  color: #000;
+  border: none;
+  padding: 1rem 2.5rem;
+  border-radius: 2rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  pointer-events: auto;
+  cursor: pointer;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  transition: transform 0.15s ease;
+}
+
+.ar-start-btn:active {
+  transform: scale(0.95);
 }
 
 /* --- Fallback --- */

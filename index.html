@@ -23,9 +23,12 @@
     <p class="loading-sub">Please allow camera access when prompted</p>
   </div>
 
-  <!-- Phase 2: WebXR DOM overlay (visible during XR session) -->
+  <!-- Phase 1+2: AR overlay (prompt + WebXR DOM overlay) -->
   <div id="ar-overlay" class="ar-overlay hidden">
-    <p id="ar-status" class="ar-status"></p>
+    <div class="ar-overlay-content">
+      <p id="ar-status" class="ar-status"></p>
+      <button id="ar-start-btn" class="ar-start-btn hidden">Tap to enter AR</button>
+    </div>
   </div>
 
   <!-- Fallback for unsupported devices -->

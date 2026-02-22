@@ -31,6 +31,7 @@ const ui = {
   loadingText: () => document.getElementById('loading-text'),
   arOverlay: () => document.getElementById('ar-overlay'),
   arStatus: () => document.getElementById('ar-status'),
+  startBtn: () => document.getElementById('ar-start-btn'),
   fallback: () => document.getElementById('fallback-message'),
 };
 
@@ -90,13 +91,27 @@ async function detectMarker() {
 // ─────────────────────────────────────────────
 // Phase 2: WebXR world-tracked session
 // ─────────────────────────────────────────────
-async function startWorldAR() {
-  // AR overlay already visible from Phase 1
-  setArStatus('Marker found — starting AR…');
-  console.log('[HIDDEN] Phase 2: starting WebXR…');
+/**
+ * Wait for user to tap the 'Enter AR' button.
+ * This tap provides the user gesture required by Chrome for requestSession.
+ * Returns a Promise that resolves when the button is tapped.
+ */
+function waitForUserTap() {
+  return new Promise((resolve) => {
+    setArStatus('Marker found!');
+    const btn = ui.startBtn();
+    if (!btn) { resolve(); return; }
+    btn.classList.remove('hidden');
+    btn.addEventListener('click', () => {
+      btn.classList.add('hidden');
+      resolve();
+    }, { once: true });
+  });
+}
 
-  // Small delay for camera handoff (AR.js → WebXR)
-  await new Promise((r) => setTimeout(r, 500));
+async function startWorldAR() {
+  console.log('[HIDDEN] Phase 2: starting WebXR…');
+  setArStatus('Starting AR…');
 
   let hitCount = 0;
   const REQUIRED_HITS = 3; // require a few stable hits before placing
@@ -171,8 +186,11 @@ function placeTree(hitPose) {
 // ─────────────────────────────────────────────
 function startFallbackMode() {
   console.log('[HIDDEN] Fallback: no WebXR, using 3D viewer');
+  // Hide all overlays
   const overlay = ui.overlay();
   if (overlay) overlay.classList.add('hidden');
+  const arOverlay = ui.arOverlay();
+  if (arOverlay) arOverlay.classList.add('hidden');
 
   if (treeData) {
     treeData.points.position.set(0, 0, -3);
@@ -226,7 +244,10 @@ async function init() {
     console.warn('[HIDDEN] Marker detection failed, skipping to WebXR:', err);
   }
 
-  // Phase 2: WebXR world-tracked AR
+  // User gesture gate — WebXR requestSession requires a tap on Chrome Android
+  await waitForUserTap();
+
+  // Phase 2: WebXR world-tracked AR (called within user gesture context)
   try {
     await startWorldAR();
   } catch (err) {
