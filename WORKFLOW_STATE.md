@@ -8,7 +8,7 @@
 | Field | Value |
 |---|---|
 | Phase | CONSTRUCT |
-| Current Task | Task 4 |
+| Current Task | Task 5 |
 | Status | NOT_STARTED |
 | Blocked By | — |
 | Conda Env | `stjohn` (must be active) |
@@ -22,7 +22,7 @@
 | 1. Scaffold | ✅ DONE | Committed dcf59ae, pushed to GitHub |
 | 2. Three.js Scene | ✅ DONE | scene.js + app.js with test cube |
 | 3. AR + Marker | ✅ DONE | AR.js dynamic load, Hiro marker, anchor group |
-| 4. Point Cloud | ⬜ NOT_STARTED | |
+| 4. Point Cloud | ✅ DONE | PLYLoader, 2m footprint scaling, originalPositions stored |
 | 5. Glow | ⬜ NOT_STARTED | |
 | 6. Touch | ⬜ NOT_STARTED | Can parallel with 7 |
 | 7. Audio Flock | ⬜ NOT_STARTED | Can parallel with 6 |

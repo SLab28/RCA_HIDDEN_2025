@@ -4,21 +4,26 @@
 import * as THREE from 'three';
 import { createScene } from './scene.js';
 import { initMarkerTracking, updateAR } from './marker-tracking.js';
+import { loadPointCloud } from './point-cloud-loader.js';
 
 // Future imports will be added as tasks progress:
-// import { loadPointCloud } from './point-cloud-loader.js';
 // import { initTouchInteraction } from './touch-interaction.js';
 // import { initAudioFlock } from './audio-flock.js';
 // import { initDissolve } from './dissolve.js';
 
 console.log('[HIDDEN] AR app initialising');
 
+const TREE_PLY_URL = 'assets/St_John_Tree_point_cloud_niagara_yup_green_4k_points.ply';
+
 let scene, camera, renderer;
 let anchorGroup;
-let testCube;
+let treeData = null; // { points, originalPositions, geometry }
 
 async function init() {
   console.log('[HIDDEN] init() called');
+
+  const overlay = document.getElementById('loading-overlay');
+  const loadingText = overlay ? overlay.querySelector('p') : null;
 
   // Create Three.js scene
   const sceneObjects = createScene();
@@ -33,20 +38,31 @@ async function init() {
     console.log('[HIDDEN] AR marker tracking ready');
   } catch (err) {
     console.warn('[HIDDEN] AR init failed, falling back to 3D viewer:', err);
-    // Fallback: create a simple group at scene root
     anchorGroup = new THREE.Group();
     scene.add(anchorGroup);
   }
 
-  // Test cube — will be removed after Task 3 verification
-  const geometry = new THREE.BoxGeometry(0.5, 0.5, 0.5);
-  const material = new THREE.MeshNormalMaterial();
-  testCube = new THREE.Mesh(geometry, material);
-  testCube.position.set(0, 0.25, 0);
-  anchorGroup.add(testCube);
+  // Load tree point cloud
+  if (loadingText) loadingText.textContent = 'Loading point cloud…';
+  try {
+    const t0 = performance.now();
+    treeData = await loadPointCloud(TREE_PLY_URL, anchorGroup, {
+      footprint: 2,
+      pointSize: 0.008,
+      onProgress: (event) => {
+        if (event.lengthComputable && loadingText) {
+          const pct = Math.round((event.loaded / event.total) * 100);
+          loadingText.textContent = `Loading point cloud… ${pct}%`;
+        }
+      },
+    });
+    const dt = performance.now() - t0;
+    console.log(`[HIDDEN] Tree loaded in ${dt.toFixed(0)}ms`);
+  } catch (err) {
+    console.error('[HIDDEN] Failed to load point cloud:', err);
+  }
 
   // Hide loading overlay
-  const overlay = document.getElementById('loading-overlay');
   if (overlay) {
     overlay.classList.add('hidden');
   }
@@ -62,12 +78,6 @@ function animate() {
 
   // Update AR tracking each frame
   updateAR();
-
-  // Rotate test cube
-  if (testCube) {
-    testCube.rotation.x += 0.01;
-    testCube.rotation.y += 0.015;
-  }
 
   renderer.render(scene, camera);
 }
