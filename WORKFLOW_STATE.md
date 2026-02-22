@@ -8,7 +8,7 @@
 | Field | Value |
 |---|---|
 | Phase | CONSTRUCT |
-| Current Task | Task 2 |
+| Current Task | Task 3 |
 | Status | NOT_STARTED |
 | Blocked By | — |
 | Conda Env | `stjohn` (must be active) |
@@ -20,7 +20,7 @@
 | Task | Status | Notes |
 |---|---|---|
 | 1. Scaffold | ✅ DONE | Committed dcf59ae, pushed to GitHub |
-| 2. Three.js Scene | ⬜ NOT_STARTED | |
+| 2. Three.js Scene | ✅ DONE | scene.js + app.js with test cube |
 | 3. AR + Marker | ⬜ NOT_STARTED | |
 | 4. Point Cloud | ⬜ NOT_STARTED | |
 | 5. Glow | ⬜ NOT_STARTED | |
