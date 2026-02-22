@@ -117,7 +117,7 @@ async function detectMarker() {
 }
 
 // ─────────────────────────────────────────────
-// Phase 2: WebXR world-tracked session
+// Phase 2: WebXR world-tracked session (reticle + tap-to-place)
 // ─────────────────────────────────────────────
 /**
  * Wait for user to tap the 'Enter AR' button.
@@ -150,32 +150,20 @@ function waitForUserTapAndStartAR() {
 }
 
 async function startWorldAR() {
-  console.log('[HIDDEN] Phase 2: starting WebXR…');
+  console.log('[HIDDEN] Starting WebXR…');
   setArStatus('Starting AR…');
 
-  let hitCount = 0;
-  const REQUIRED_HITS = 3; // require a few stable hits before placing
-
   await startWebXRSession(renderer, scene, camera, {
-    onHitTest: (hitPose) => {
-      if (treePlaced) return;
-
-      if (hitPose) {
-        hitCount++;
-        setArStatus('Floor detected — placing tree…');
-
-        if (hitCount >= REQUIRED_HITS) {
-          placeTree(hitPose);
-        }
-      } else {
-        hitCount = 0;
-        setArStatus('Scanning floor…');
-      }
+    onPlace: (hitPose) => {
+      placeTree(hitPose);
     },
     onSessionEnd: () => {
       console.log('[HIDDEN] WebXR session ended');
     },
   });
+
+  // Update status once session is live
+  setArStatus('Place the square over the marker, then tap');
 
   // Request wake lock to prevent screen dimming
   await requestWakeLock();
@@ -197,18 +185,9 @@ function placeTree(hitPose) {
     hitPose.position.z
   );
 
-  // Apply floor orientation (align Y-up with surface normal)
-  const q = new THREE.Quaternion(
-    hitPose.orientation.x,
-    hitPose.orientation.y,
-    hitPose.orientation.z,
-    hitPose.orientation.w
-  );
-  points.quaternion.copy(q);
-
   scene.add(points);
 
-  // Stop hit-testing — tree is placed
+  // Stop hit-testing
   stopHitTest();
 
   // Fade out AR status
@@ -218,7 +197,7 @@ function placeTree(hitPose) {
     if (arOverlay) arOverlay.classList.add('hidden');
   }, 1000);
 
-  console.log(`[HIDDEN] ✓ Tree placed at (${hitPose.position.x.toFixed(2)}, ${hitPose.position.y.toFixed(2)}, ${hitPose.position.z.toFixed(2)})`);
+  console.log(`[HIDDEN] Tree placed at (${hitPose.position.x.toFixed(2)}, ${hitPose.position.y.toFixed(2)}, ${hitPose.position.z.toFixed(2)})`);
 }
 
 // ─────────────────────────────────────────────
@@ -267,43 +246,8 @@ async function startMarkerAnchoredMode() {
   }
 
   if (treeData && treeData.points) {
-    ar.anchorGroup.add(treeData.points);
-  }
-
-  function animate() {
-    requestAnimationFrame(animate);
-    ar.update();
-    renderer.render(scene, camera);
-  }
-  animate();
-}
-
-// ─────────────────────────────────────────────
-// Desktop fallback: AR.js marker mode (no WebXR)
-// ─────────────────────────────────────────────
-async function startDesktopMarkerMode() {
-  console.log('[HIDDEN] Desktop mode: AR.js marker tracking (no WebXR immersive-ar)');
-
-  const overlay = ui.overlay();
-  if (overlay) overlay.classList.add('hidden');
-
-  const arOverlay = ui.arOverlay();
-  if (arOverlay) arOverlay.classList.remove('hidden');
-  const btn = ui.startBtn();
-  if (btn) btn.classList.add('hidden');
-  setArStatus('Desktop mode — point camera at the marker');
-
-  let ar;
-  try {
-    ar = await startMarkerTracking(scene, camera, renderer);
-  } catch (err) {
-    console.error('[HIDDEN] Desktop marker mode failed:', err);
-    startFallbackMode();
-    return;
-  }
-
-  if (treeData && treeData.points) {
-    // Attach to marker anchor group (AR.js coordinates)
+    // Scale tree to 5.7x marker size (2m / 0.35m ≈ 5.7)
+    treeData.points.scale.set(5.7, 5.7, 5.7);
     ar.anchorGroup.add(treeData.points);
   }
 
@@ -353,10 +297,6 @@ async function init() {
   if (!webxrOK) {
     await startMarkerAnchoredMode();
     return;
-  }
-
-  if (runningMode === 'webxr') {
-    // continue to WebXR flow
   }
 
   // Phase 1: AR.js marker detection
