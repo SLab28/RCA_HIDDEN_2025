@@ -96,15 +96,27 @@ async function detectMarker() {
  * This tap provides the user gesture required by Chrome for requestSession.
  * Returns a Promise that resolves when the button is tapped.
  */
-function waitForUserTap() {
+function waitForUserTapAndStartAR() {
   return new Promise((resolve) => {
     setArStatus('Marker found!');
     const btn = ui.startBtn();
     if (!btn) { resolve(); return; }
     btn.classList.remove('hidden');
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       btn.classList.add('hidden');
-      resolve();
+      btn.disabled = true;
+
+      // IMPORTANT: keep requestSession call in this click task to preserve
+      // Chrome's transient user activation requirement for immersive-ar.
+      try {
+        await startWorldAR();
+      } catch (err) {
+        console.error('[HIDDEN] WebXR failed:', err);
+        setArStatus('AR start failed — showing fallback');
+        startFallbackMode();
+      } finally {
+        resolve();
+      }
     }, { once: true });
   });
 }
@@ -244,16 +256,9 @@ async function init() {
     console.warn('[HIDDEN] Marker detection failed, skipping to WebXR:', err);
   }
 
-  // User gesture gate — WebXR requestSession requires a tap on Chrome Android
-  await waitForUserTap();
-
-  // Phase 2: WebXR world-tracked AR (called within user gesture context)
-  try {
-    await startWorldAR();
-  } catch (err) {
-    console.error('[HIDDEN] WebXR failed:', err);
-    startFallbackMode();
-  }
+  // User gesture gate — WebXR requestSession requires a tap on Chrome Android.
+  // We start Phase 2 directly inside the click handler to preserve activation.
+  await waitForUserTapAndStartAR();
 }
 
 // Wait for DOM ready
