@@ -80,17 +80,17 @@ export async function initMarkerTracking(scene, camera, renderer) {
   anchorGroup.name = 'ar-anchor';
   scene.add(anchorGroup);
 
-  // ArMarkerControls — use Hiro preset for development
+  // ArMarkerControls — custom pattern marker
   const markerControls = new THREEx.ArMarkerControls(arToolkitContext, anchorGroup, {
-    type: 'preset',
-    preset: 'hiro',
+    type: 'pattern',
+    patternUrl: 'assets/position_marker.patt',
     changeMatrixMode: 'modelViewMatrix',
   });
 
   // Marker found/lost detection
   anchorGroup.visible = false;
 
-  console.log('[AR] Marker tracking initialised (Hiro preset)');
+  console.log('[AR] Marker tracking initialised (custom pattern: position_marker.patt)');
 
   return { anchorGroup };
 }
