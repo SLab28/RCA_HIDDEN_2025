@@ -24,7 +24,7 @@ Contribution to the staff HIDDEN exhibition at the Royal College of Art.
 
 ## Exhibition
 
-- **Location:** Royal College of Art, London
+- **Location:** Hangar, RCA Battersea Studio Building, Royal College of Art, London
 
 ## License
 
