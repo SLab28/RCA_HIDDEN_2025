@@ -8,7 +8,7 @@
 | Field | Value |
 |---|---|
 | Phase | CONSTRUCT |
-| Current Task | Task 1 |
+| Current Task | Task 2 |
 | Status | NOT_STARTED |
 | Blocked By | — |
 | Conda Env | `stjohn` (must be active) |
@@ -19,7 +19,7 @@
 
 | Task | Status | Notes |
 |---|---|---|
-| 1. Scaffold | ⬜ NOT_STARTED | |
+| 1. Scaffold | ✅ DONE | Committed dcf59ae, pushed to GitHub |
 | 2. Three.js Scene | ⬜ NOT_STARTED | |
 | 3. AR + Marker | ⬜ NOT_STARTED | |
 | 4. Point Cloud | ⬜ NOT_STARTED | |
@@ -39,6 +39,8 @@
 | 2 | Anaconda env `stjohn` | Consistent Python env across all terminal sessions | 2026-02-22 |
 | 3 | `.windsurf/rules/` for project rules | Windsurf Wave 8+ standard, "Always On" activation | 2026-02-22 |
 | 4 | No build step | GitHub Pages static hosting, CDN-only deps | 2026-02-22 |
+| 5 | GitHub repo: SLab28/RCA_HIDDEN_2025 | App files in repo root, GitHub Pages from main branch | 2026-02-22 |
+| 6 | Windsurf rules in .windsurf/rules/ | Moved from root WINDSURF_RULE_*.md to proper location | 2026-02-22 |
 
 ---
 
