@@ -14,7 +14,7 @@ canvas {
   left: 0;
 }
 
-/* AR.js injects a <video> element for the camera feed */
+/* AR.js injects a <video> element for the camera feed (Phase 1) */
 video {
   position: absolute;
   top: 0;
@@ -22,6 +22,7 @@ video {
   z-index: -1;
 }
 
+/* --- Phase 0: Loading overlay --- */
 .loading-overlay {
   position: fixed;
   inset: 0;
@@ -41,6 +42,29 @@ video {
   margin-top: 0.5rem;
 }
 
+/* --- Phase 2: WebXR DOM overlay --- */
+.ar-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 4rem;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.ar-status {
+  background: rgba(0, 0, 0, 0.6);
+  padding: 0.75rem 1.5rem;
+  border-radius: 2rem;
+  font-size: 0.95rem;
+  text-align: center;
+  pointer-events: auto;
+  transition: opacity 0.5s ease;
+}
+
+/* --- Fallback --- */
 .fallback-message {
   position: fixed;
   inset: 0;

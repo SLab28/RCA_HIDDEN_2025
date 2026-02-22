@@ -5,32 +5,38 @@ import * as THREE from 'three';
 
 /**
  * Create and return the core Three.js objects.
+ * Renderer is XR-ready; camera is managed by WebXR during Phase 2.
  * @returns {{ scene: THREE.Scene, camera: THREE.PerspectiveCamera, renderer: THREE.WebGLRenderer }}
  */
 export function createScene() {
   const scene = new THREE.Scene();
 
-  // Camera — AR.js will override the projection matrix when in AR mode
+  // Camera — WebXR overrides projection + view matrices in AR mode
+  // Fallback position for non-AR / AR.js Phase 1
   const camera = new THREE.PerspectiveCamera(
     70,
     window.innerWidth / window.innerHeight,
     0.01,
-    20
+    100
   );
-  // Position only used in fallback 3D mode; AR.js controls camera in AR mode
-  camera.position.set(0, 1, 3);
+  camera.position.set(0, 1.6, 3);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setPixelRatio(window.devicePixelRatio);
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
+  // XR is NOT enabled here — app.js enables it only when entering Phase 2 (WebXR).
+  // Enabling it too early interferes with normal canvas rendering during Phase 1.
+  renderer.setClearColor(0x000000, 0); // transparent background so AR.js video shows through
   document.body.appendChild(renderer.domElement);
 
-  // Resize handler
+  // Resize handler (only applies outside XR session)
   window.addEventListener('resize', () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
+    if (!renderer.xr.isPresenting) {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
   });
 
   return { scene, camera, renderer };

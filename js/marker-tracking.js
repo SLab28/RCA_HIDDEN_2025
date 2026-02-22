@@ -1,5 +1,9 @@
-// marker-tracking.js — AR.js / MindAR anchor logic
+// marker-tracking.js — AR.js marker detection (Phase 1 only)
 // HIDDEN Exhibition · AR Point Cloud Experience
+//
+// AR.js is used ONLY to detect the custom marker, confirming the user
+// is pointing at the correct floor position. After detection, AR.js is
+// cleaned up and WebXR takes over for world-tracked persistence.
 
 import * as THREE from 'three';
 
@@ -8,12 +12,10 @@ const CAMERA_PARAM_URL = 'https://raw.githack.com/AR-js-org/AR.js/master/data/da
 
 let arToolkitSource = null;
 let arToolkitContext = null;
-let _anchorGroup = null;
-let markerFound = false;
+let _animFrameId = null;
 
 /**
  * Dynamically load AR.js (ar-threex.js).
- * AR.js expects THREE on window.
  */
 function loadARjs() {
   window.THREE = THREE;
@@ -21,19 +23,20 @@ function loadARjs() {
     const script = document.createElement('script');
     script.src = AR_JS_URL;
     script.onload = () => {
-      console.log('[AR] ar-threex.js loaded');
+      console.log('[AR.js] ar-threex.js loaded');
       resolve();
     };
-    script.onerror = () => reject(new Error('[AR] Failed to load ar-threex.js'));
+    script.onerror = () => reject(new Error('[AR.js] Failed to load ar-threex.js'));
     document.head.appendChild(script);
   });
 }
 
 /**
- * Handle resize for AR.js source and context (Pitfall 4).
+ * Handle resize for AR.js source and context.
  * @param {THREE.WebGLRenderer} renderer
  */
 function onResize(renderer) {
+  if (!arToolkitSource) return;
   arToolkitSource.onResizeElement();
   arToolkitSource.copyElementSizeTo(renderer.domElement);
   if (arToolkitContext && arToolkitContext.arController !== null) {
@@ -42,37 +45,43 @@ function onResize(renderer) {
 }
 
 /**
- * Initialise AR.js marker tracking.
- * @param {THREE.Scene} scene
- * @param {THREE.PerspectiveCamera} camera
+ * Start AR.js and wait until the custom marker is detected.
+ * Resolves as soon as the marker is found for the first time.
+ * Does NOT manage the tree or any scene content.
+ *
  * @param {THREE.WebGLRenderer} renderer
- * @returns {Promise<{ anchorGroup: THREE.Group }>}
+ * @returns {Promise<void>} Resolves when marker is detected
  */
-export async function initMarkerTracking(scene, camera, renderer) {
+export async function waitForMarkerDetection(renderer) {
   await loadARjs();
 
   /* global THREEx */
 
-  // Reset camera for AR.js — it manages the projection matrix
-  camera.position.set(0, 0, 0);
-  camera.lookAt(0, 0, 0);
+  // Hide Three.js canvas during Phase 1 — AR.js video shows directly
+  const canvas = renderer.domElement;
+  canvas.style.display = 'none';
 
   // ArToolkitSource — webcam
   arToolkitSource = new THREEx.ArToolkitSource({ sourceType: 'webcam' });
 
   await new Promise((resolve) => {
     arToolkitSource.init(function onReady() {
-      console.log('[AR] ArToolkitSource ready');
-      onResize(renderer);
+      console.log('[AR.js] Camera ready');
+      // Make the video element fill the screen
+      const video = arToolkitSource.domElement;
+      video.style.position = 'fixed';
+      video.style.top = '0';
+      video.style.left = '0';
+      video.style.width = '100vw';
+      video.style.height = '100vh';
+      video.style.objectFit = 'cover';
+      video.style.zIndex = '0';
       resolve();
     });
   });
 
-  window.addEventListener('resize', () => {
-    onResize(renderer);
-  });
-
-  // ArToolkitContext — marker detection engine
+  // ArToolkitContext — marker detection engine (needs a dummy camera for projection)
+  const arCamera = new THREE.PerspectiveCamera();
   arToolkitContext = new THREEx.ArToolkitContext({
     cameraParametersUrl: CAMERA_PARAM_URL,
     detectionMode: 'mono',
@@ -80,55 +89,72 @@ export async function initMarkerTracking(scene, camera, renderer) {
 
   await new Promise((resolve) => {
     arToolkitContext.init(function onCompleted() {
-      console.log('[AR] ArToolkitContext initialised');
-      camera.projectionMatrix.copy(arToolkitContext.getProjectionMatrix());
+      console.log('[AR.js] ArToolkit context ready');
+      arCamera.projectionMatrix.copy(arToolkitContext.getProjectionMatrix());
       resolve();
     });
   });
 
-  // Anchor group — all AR content parents to this
-  const anchorGroup = new THREE.Group();
-  anchorGroup.name = 'ar-anchor';
-  scene.add(anchorGroup);
-  _anchorGroup = anchorGroup;
+  // Marker probe group — just used to detect marker visibility
+  const arScene = new THREE.Scene();
+  const probeGroup = new THREE.Group();
+  arScene.add(probeGroup);
 
-  // ArMarkerControls — custom pattern marker
-  new THREEx.ArMarkerControls(arToolkitContext, anchorGroup, {
+  new THREEx.ArMarkerControls(arToolkitContext, probeGroup, {
     type: 'pattern',
     patternUrl: 'assets/position_marker.patt',
     changeMatrixMode: 'modelViewMatrix',
   });
 
-  console.log('[AR] Marker tracking initialised (custom pattern: position_marker.patt)');
+  console.log('[AR.js] Waiting for marker detection…');
 
-  return { anchorGroup };
-}
+  // Poll for marker detection
+  return new Promise((resolve) => {
+    function tick() {
+      if (!arToolkitSource || !arToolkitSource.ready) {
+        _animFrameId = requestAnimationFrame(tick);
+        return;
+      }
 
-/**
- * Call once per frame to update AR tracking.
- */
-export function updateAR() {
-  if (!arToolkitSource || !arToolkitSource.ready) return;
+      // Feed video frame to artoolkit for marker detection (no Three.js render needed)
+      arToolkitContext.update(arToolkitSource.domElement);
 
-  arToolkitContext.update(arToolkitSource.domElement);
+      // AR.js sets probeGroup.visible = true when marker is detected
+      if (probeGroup.visible) {
+        console.log('[AR.js] ✓ Marker detected!');
+        // Restore canvas for Phase 2
+        canvas.style.display = 'block';
+        cleanupARjs();
+        resolve();
+        return;
+      }
 
-  // Manually track marker visibility via the anchor group's matrix
-  if (_anchorGroup) {
-    const wasFound = markerFound;
-    // AR.js sets the object visible when marker is detected
-    markerFound = _anchorGroup.visible;
-    if (markerFound && !wasFound) {
-      console.log('[AR] Marker FOUND');
-    } else if (!markerFound && wasFound) {
-      console.log('[AR] Marker LOST');
+      _animFrameId = requestAnimationFrame(tick);
     }
-  }
+
+    _animFrameId = requestAnimationFrame(tick);
+  });
 }
 
 /**
- * Check if the marker is currently detected.
- * @returns {boolean}
+ * Clean up AR.js resources (video element, scripts, etc.)
  */
-export function isMarkerVisible() {
-  return markerFound;
+function cleanupARjs() {
+  if (_animFrameId) {
+    cancelAnimationFrame(_animFrameId);
+    _animFrameId = null;
+  }
+
+  // Stop and remove the video element AR.js created
+  if (arToolkitSource && arToolkitSource.domElement) {
+    const video = arToolkitSource.domElement;
+    if (video.srcObject) {
+      video.srcObject.getTracks().forEach((t) => t.stop());
+    }
+    video.remove();
+    console.log('[AR.js] Camera stream stopped');
+  }
+
+  arToolkitSource = null;
+  arToolkitContext = null;
 }

@@ -17,14 +17,21 @@
   </script>
 </head>
 <body>
+  <!-- Phase 0: Loading overlay (before any AR) -->
   <div id="loading-overlay" class="loading-overlay">
-    <p>Loading HIDDEN…</p>
+    <p id="loading-text">Loading HIDDEN…</p>
     <p class="loading-sub">Please allow camera access when prompted</p>
   </div>
 
+  <!-- Phase 2: WebXR DOM overlay (visible during XR session) -->
+  <div id="ar-overlay" class="ar-overlay hidden">
+    <p id="ar-status" class="ar-status"></p>
+  </div>
+
+  <!-- Fallback for unsupported devices -->
   <div id="fallback-message" class="fallback-message hidden">
-    <p>Camera access is required for the AR experience.</p>
-    <p>Please reload and allow camera permissions.</p>
+    <p>This device does not support AR.</p>
+    <p>Please use Chrome on an ARCore-compatible Android device.</p>
   </div>
 
   <script type="module" src="js/app.js"></script>
