@@ -5,7 +5,8 @@ import * as THREE from 'three';
 
 /**
  * Creates flocking animation for all tree points
- * All points move as a coordinated flock like fireflies
+ * The floating animation IS the flocking system - particles move as a coordinated flock like fireflies
+ * Only 30% of particles leave trails for performance optimization
  */
 export class FloatingAnimation {
   constructor(points, options = {}) {
@@ -15,6 +16,8 @@ export class FloatingAnimation {
     // this.surfacePoints = null; // Removed - using all points
     this.sampledIndices = null; // Sampled point indices for performance
     this.boids = null; // Flocking data for each point
+    this.trailIntensities = null; // Trail intensity data for each point
+    this.previousVelocities = null; // Previous velocities for trail calculation
     this.lastFrameTime = null; // Performance monitoring
     this.isActive = false;
     this.startTime = null;
@@ -33,6 +36,11 @@ export class FloatingAnimation {
       delay: 0,             // No delay - start immediately
       fadeInDuration: 1000, // 1 second fade-in (faster)
       surfaceThreshold: 0.02, // Distance threshold for surface detection
+      trailIntensity: 5.0,  // Maximum trail intensity - increased for maximum visibility
+      trailFadeSpeed: 1.0,  // No fading - trails stay permanent
+      trailMinIntensity: 0.5,  // Minimum intensity - trails never fade completely (increased)
+      trailVelocityThreshold: 0.00001, // Extremely low threshold - almost any movement creates trails
+      trailParticleRatio: 0.3, // Only 30% of particles leave trails for performance
       ...options
     };
     
@@ -69,8 +77,15 @@ export class FloatingAnimation {
     console.log(`[FloatingAnimation] ${isMobile ? 'Mobile' : 'Desktop'} detected: using ${this.sampledIndices.length} sampled points out of ${positions.count}`);
     
     this.boids = this.createBoids(this.sampledIndices.length);
+    
+    // Initialize trail data
+    this.trailIntensities = new Float32Array(positions.count);
+    this.trailIntensities.fill(0.0);
+    this.previousVelocities = new Float32Array(this.sampledIndices.length * 3); // x,y,z for each sampled point
+    
     console.log(`[FloatingAnimation] Using ${this.sampledIndices.length} sampled points out of ${positions.count} for flocking animation`);
     console.log(`[FloatingAnimation] Sample rate: 1 in ${sampleRate}`);
+    console.log(`[FloatingAnimation] Trail system initialized`);
     console.log(`[FloatingAnimation] Flocking system initialized successfully`);
   }
   
@@ -98,7 +113,8 @@ export class FloatingAnimation {
   }
   
   /**
-   * Start the floating animation (called after tree placement)
+   * Start the flocking animation (called after tree placement)
+   * This IS the floating animation - the flocking particles that leave trails
    */
   start() {
     if (this.isActive) return;
@@ -118,10 +134,10 @@ export class FloatingAnimation {
       return;
     }
     
-    // Performance monitoring - skip frames if needed
-    if (this.lastFrameTime && performance.now() - this.lastFrameTime < 16) {
-      return; // Skip frame if running too fast (mobile optimization)
-    }
+    // Performance monitoring - DISABLED to prevent freezing
+    // if (this.lastFrameTime && performance.now() - this.lastFrameTime < 16) {
+    //   return; // Skip frame if running too fast (mobile optimization)
+    // }
     this.lastFrameTime = performance.now();
     
     const currentTime = this.clock.getElapsedTime() * 1000; // Convert to ms
@@ -142,6 +158,9 @@ export class FloatingAnimation {
     
     // Update boid positions and apply flocking
     this.updateFlocking(animationTime);
+    
+    // Update trail intensities based on particle velocities
+    this.updateTrails();
     
     // Apply boid positions to sampled points only
     for (let i = 0; i < this.boids.length; i++) {
@@ -167,6 +186,12 @@ export class FloatingAnimation {
     
     // Mark positions as needing update
     this.geometry.attributes.position.needsUpdate = true;
+    
+    // Update trail intensity attribute
+    if (this.geometry.attributes.trailIntensity) {
+      this.geometry.attributes.trailIntensity.array.set(this.trailIntensities);
+      this.geometry.attributes.trailIntensity.needsUpdate = true;
+    }
   }
   
   /**
@@ -221,6 +246,114 @@ export class FloatingAnimation {
       boid.position.y = Math.max(-0.1, Math.min(maxY, boid.position.y)); // More upward range
       boid.position.z = Math.max(-maxOffset, Math.min(maxOffset, boid.position.z));
     }
+  }
+  
+  /**
+   * Update trail intensities based on particle velocities
+   */
+  updateTrails() {
+    // Apply minimum intensity to maintain permanent trails
+    for (let i = 0; i < this.trailIntensities.length; i++) {
+      // Only fade if above minimum, then maintain minimum intensity
+      if (this.trailIntensities[i] > this.config.trailMinIntensity) {
+        this.trailIntensities[i] = Math.max(
+          this.trailIntensities[i] * this.config.trailFadeSpeed,
+          this.config.trailMinIntensity
+        );
+      }
+    }
+    
+    let totalTrailIntensity = 0;
+    let activeTrails = 0;
+    
+    // Calculate new trail intensities based on velocities
+    for (let i = 0; i < this.boids.length; i++) {
+      const boid = this.boids[i];
+      const pointIndex = this.sampledIndices[i];
+      const prevVelIndex = i * 3;
+      
+      // Only 30% of particles create trails for performance
+      const shouldCreateTrail = (i % Math.floor(1 / this.config.trailParticleRatio)) === 0;
+      
+      if (!shouldCreateTrail) {
+        // Skip trail creation for this particle
+        // Store current velocity for next frame
+        const currentVelX = boid.velocity.x;
+        const currentVelY = boid.velocity.y;
+        const currentVelZ = boid.velocity.z;
+        this.previousVelocities[prevVelIndex] = currentVelX;
+        this.previousVelocities[prevVelIndex + 1] = currentVelY;
+        this.previousVelocities[prevVelIndex + 2] = currentVelZ;
+        continue;
+      }
+      
+      // Get current velocity
+      const currentVelX = boid.velocity.x;
+      const currentVelY = boid.velocity.y;
+      const currentVelZ = boid.velocity.z;
+      
+      // Get previous velocity
+      const prevVelX = this.previousVelocities[prevVelIndex];
+      const prevVelY = this.previousVelocities[prevVelIndex + 1];
+      const prevVelZ = this.previousVelocities[prevVelIndex + 2];
+      
+      // Calculate velocity change (acceleration)
+      const accelX = currentVelX - prevVelX;
+      const accelY = currentVelY - prevVelY;
+      const accelZ = currentVelZ - prevVelZ;
+      const acceleration = Math.sqrt(accelX * accelX + accelY * accelY + accelZ * accelZ);
+      
+      // Calculate current speed
+      const speed = Math.sqrt(currentVelX * currentVelX + currentVelY * currentVelY + currentVelZ * currentVelZ);
+      
+      // Update trail intensity based on speed and acceleration
+      if (speed > this.config.trailVelocityThreshold) {
+        // Higher speed and acceleration = more intense trails
+        const intensityFactor = Math.min(speed / this.config.maxSpeed, 1.0);
+        const accelFactor = Math.min(acceleration * 50, 1.0); // Scale acceleration
+        const newIntensity = intensityFactor * (1.0 + accelFactor) * this.config.trailIntensity;
+        
+        // Set trail intensity for this point (and nearby points for smoother trails)
+        this.trailIntensities[pointIndex] = Math.max(this.trailIntensities[pointIndex], newIntensity);
+        
+        totalTrailIntensity += newIntensity;
+        activeTrails++;
+        
+        // Add trail to nearby points for smoother effect
+        for (let j = 1; j <= 2; j++) {
+          if (pointIndex - j >= 0) {
+            this.trailIntensities[pointIndex - j] = Math.max(this.trailIntensities[pointIndex - j], newIntensity * 0.5);
+          }
+          if (pointIndex + j < this.trailIntensities.length) {
+            this.trailIntensities[pointIndex + j] = Math.max(this.trailIntensities[pointIndex + j], newIntensity * 0.5);
+          }
+        }
+      } else {
+        // Fallback: create minimal trails for testing even if velocity is low
+        if (Math.random() < 0.01) { // 1% chance per frame
+          const minIntensity = 0.2;
+          this.trailIntensities[pointIndex] = Math.max(this.trailIntensities[pointIndex], minIntensity);
+          totalTrailIntensity += minIntensity;
+          activeTrails++;
+        }
+      }
+      
+      // Store current velocity for next frame
+      this.previousVelocities[prevVelIndex] = currentVelX;
+      this.previousVelocities[prevVelIndex + 1] = currentVelY;
+      this.previousVelocities[prevVelIndex + 2] = currentVelZ;
+    }
+    
+    // Debug logging every 60 frames (once per second at 60fps) - REMOVED to prevent freezing
+    // if (!this.debugFrameCounter) this.debugFrameCounter = 0;
+    // this.debugFrameCounter++;
+    // if (this.debugFrameCounter % 60 === 0) {
+    //   console.log(`[FloatingAnimation] Trail debug - Active trails: ${activeTrails}, Total intensity: ${totalTrailIntensity.toFixed(3)}`);
+    //   if (activeTrails > 0) {
+    //     const maxIntensity = Math.max(...this.trailIntensities);
+    //     console.log(`[FloatingAnimation] Max trail intensity: ${maxIntensity.toFixed(3)}`);
+    //   }
+    // }
   }
   
   /**
@@ -347,6 +480,13 @@ export class FloatingAnimation {
       this.geometry.attributes.position.needsUpdate = true;
     }
     
+    // Reset trail intensities
+    if (this.trailIntensities && this.geometry && this.geometry.attributes.trailIntensity) {
+      this.trailIntensities.fill(0.0);
+      this.geometry.attributes.trailIntensity.array.set(this.trailIntensities);
+      this.geometry.attributes.trailIntensity.needsUpdate = true;
+    }
+    
     console.log('[FloatingAnimation] Flocking stopped');
   }
   
@@ -366,6 +506,8 @@ export class FloatingAnimation {
     // this.surfacePoints = null; // Removed - using all points
     this.sampledIndices = null;
     this.boids = null;
+    this.trailIntensities = null;
+    this.previousVelocities = null;
     this.geometry = null;
     this.points = null;
   }

@@ -50,6 +50,80 @@ function setArStatus(msg) {
   if (el) el.textContent = msg;
 }
 
+/**
+ * Type out text with a typewriter effect and fade between sentences
+ * @param {string} text - The text to type
+ * @param {HTMLElement} element - The element to type into
+ * @param {number} speed - Typing speed in ms per character
+ * @returns {Promise} - Resolves when typing is complete
+ */
+function typeText(text, element, speed = 80) {
+  return new Promise((resolve) => {
+    if (!element) {
+      resolve();
+      return;
+    }
+    
+    const sentences = text.split('. ');
+    let currentSentenceIndex = 0;
+    
+    function typeSentence() {
+      if (currentSentenceIndex >= sentences.length) {
+        resolve();
+        return;
+      }
+      
+      const sentence = sentences[currentSentenceIndex] + (currentSentenceIndex < sentences.length - 1 ? '.' : '');
+      element.textContent = '';
+      let charIndex = 0;
+      
+      function typeChar() {
+        if (charIndex < sentence.length) {
+          const char = sentence[charIndex];
+          element.textContent += char;
+          charIndex++;
+          
+          // Add pause after periods (dots)
+          const delay = char === '.' ? 500 : speed;
+          
+          setTimeout(typeChar, delay);
+        } else {
+          // Sentence complete, wait then fade out
+          setTimeout(() => {
+            fadeOutAndNext();
+          }, 1000);
+        }
+      }
+      
+      typeChar();
+    }
+    
+    function fadeOutAndNext() {
+      // Fade out current sentence
+      element.style.transition = 'opacity 0.5s ease-out';
+      element.style.opacity = '0';
+      
+      setTimeout(() => {
+        currentSentenceIndex++;
+        
+        // If this is the last sentence, keep it visible
+        if (currentSentenceIndex >= sentences.length) {
+          element.style.opacity = '1';
+          resolve();
+        } else {
+          // Clear and type next sentence
+          element.textContent = '';
+          element.style.opacity = '1';
+          element.style.transition = '';
+          setTimeout(typeSentence, 200);
+        }
+      }, 500);
+    }
+    
+    typeSentence();
+  });
+}
+
 function initModeToggle(runningMode, webxrSupported) {
   const btn = document.getElementById('mode-toggle-btn');
   if (!btn) return;
@@ -128,14 +202,40 @@ async function detectMarker() {
  * Returns a Promise that resolves when the button is tapped.
  */
 function waitForUserTapAndStartAR() {
-  return new Promise((resolve) => {
-    setArStatus('Marker found!');
+  return new Promise(async (resolve) => {
+    const statusEl = ui.arStatus();
     const btn = ui.startBtn();
-    if (!btn) { resolve(); return; }
-    btn.classList.remove('hidden');
+    
+    if (!btn || !statusEl) { resolve(); return; }
+    
+    // Hide button initially
+    btn.classList.add('hidden');
+    btn.style.opacity = '0';
+    btn.style.transition = 'opacity 1s ease-in-out';
+    
+    // Type out the instructions
+    const instructionText = 'Hello stranger. Turn around and stand outside of the white square. Point your camera and align the pointer with the marker on the floor. Tap when aligned. Enjoy the tree.';
+    
+    await typeText(instructionText, statusEl, 80);
+    
+    // Show button softly after typing completes
+    setTimeout(() => {
+      btn.classList.remove('hidden');
+      // Trigger reflow to ensure transition works
+      btn.offsetHeight;
+      btn.style.opacity = '1';
+    }, 500);
+    
     btn.addEventListener('click', async () => {
-      btn.classList.add('hidden');
-      btn.disabled = true;
+      // Fade out the last sentence when button is pressed
+      statusEl.style.transition = 'opacity 0.5s ease-out';
+      statusEl.style.opacity = '0';
+      
+      btn.style.opacity = '0';
+      setTimeout(() => {
+        btn.classList.add('hidden');
+        btn.disabled = true;
+      }, 1000);
 
       // IMPORTANT: keep requestSession call in this click task to preserve
       // Chrome's transient user activation requirement for immersive-ar.
@@ -183,8 +283,8 @@ async function startWorldAR() {
     },
   });
 
-  // Update status once session is live
-  setArStatus('Place the square over the marker, then tap');
+  // Update status once session is live - reticle will appear softly
+  setArStatus('Align the white square with the marker on the floor, then tap to place the tree');
 
   // Request wake lock to prevent screen dimming
   await requestWakeLock();
@@ -382,6 +482,12 @@ async function init() {
     return;
   }
 
+  // Show AR overlay immediately since we're skipping marker detection
+  const overlay = ui.overlay();
+  if (overlay) overlay.classList.add('hidden');
+  const arOverlay = ui.arOverlay();
+  if (arOverlay) arOverlay.classList.remove('hidden');
+
   // Check WebXR support
   const webxrOK = await isWebXRSupported();
   console.log(`[HIDDEN] WebXR supported: ${webxrOK}`);
@@ -400,12 +506,8 @@ async function init() {
     // Don't fallback - try WebXR anyway for emulator compatibility
   }
 
-  // Phase 1: AR.js marker detection
-  try {
-    await detectMarker();
-  } catch (err) {
-    console.warn('[HIDDEN] Marker detection failed, skipping to WebXR:', err);
-  }
+  // Skip marker detection - go directly to WebXR
+  console.log('[HIDDEN] Skipping marker detection - starting WebXR directly');
 
   // User gesture gate — WebXR requestSession requires a tap on Chrome Android.
   // We start Phase 2 directly inside the click handler to preserve activation.

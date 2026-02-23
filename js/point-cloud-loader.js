@@ -7,8 +7,10 @@ import { PLYLoader } from 'three/addons/loaders/PLYLoader.js';
 // --- Circular point sprite shaders ---
 const POINT_VERTEX_SHADER = /* glsl */ `
   attribute vec3 color;
+  attribute float trailIntensity;
   varying vec3 vColor;
   varying float vFadeAlpha;
+  varying float vTrailIntensity;
   uniform float uPointSize;
   uniform float uFadeProgress; // 0.0 to 1.0
   uniform float uTreeHeight;
@@ -30,6 +32,12 @@ const POINT_VERTEX_SHADER = /* glsl */ `
       vFadeAlpha = smoothstep(0.0, 1.0, transition);
     }
     
+    // Pass trail intensity from attribute
+    vTrailIntensity = trailIntensity;
+    
+    // Ensure minimum visibility for trails
+    vTrailIntensity = max(vTrailIntensity, 0.3);
+    
     vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
     gl_PointSize = uPointSize * (300.0 / -mvPosition.z);
     gl_PointSize = clamp(gl_PointSize, 1.0, 64.0);
@@ -40,6 +48,7 @@ const POINT_VERTEX_SHADER = /* glsl */ `
 const POINT_FRAGMENT_SHADER = /* glsl */ `
   varying vec3 vColor;
   varying float vFadeAlpha;
+  varying float vTrailIntensity;
   uniform float uEmissiveIntensity;
 
   void main() {
@@ -50,8 +59,23 @@ const POINT_FRAGMENT_SHADER = /* glsl */ `
     // Apply base-to-top fade
     alpha *= vFadeAlpha;
     
-    // Add emissive glow
-    vec3 emissiveColor = vColor * uEmissiveIntensity;
+    // SUPER ENHANCED emissive glow with trail intensity - MAXIMUM VISIBILITY
+    float emissiveMultiplier = 1.0 + vTrailIntensity * 10.0; // Increased from 5.0 to 10.0
+    vec3 emissiveColor = vColor * uEmissiveIntensity * emissiveMultiplier;
+    
+    // VERY STRONG trail glow that matches particle color exactly
+    float trailGlow = vTrailIntensity * (1.0 - dist * 3.0); // Much wider falloff
+    vec3 trailColor = vColor * trailGlow * 5.0; // Much stronger and matches particle color
+    emissiveColor += trailColor;
+    
+    // EXTRA BRIGHTNESS for trails - ensure maximum visibility
+    if (vTrailIntensity > 0.1) {
+      emissiveColor += vColor * vTrailIntensity * 8.0; // Extra boost for visible trails
+    }
+    
+    // Add base glow for all particles with trails
+    emissiveColor += vColor * vTrailIntensity * 2.0;
+    
     gl_FragColor = vec4(vColor + emissiveColor, alpha);
   }
 `;
@@ -131,6 +155,12 @@ export async function loadPointCloud(url, options = {}) {
   // Store original positions for animation reference (dissolve, touch, etc.)
   const originalPositions = new Float32Array(positions.length);
   originalPositions.set(positions);
+
+  // Add trail intensity attribute for particle trail effects
+  const pointCount = geometry.attributes.position.count;
+  const trailIntensities = new Float32Array(pointCount);
+  trailIntensities.fill(0.0); // Initialize with no trail intensity
+  geometry.setAttribute('trailIntensity', new THREE.BufferAttribute(trailIntensities, 1));
 
   // Circular point sprite material (custom shader)
   const material = new THREE.ShaderMaterial({
