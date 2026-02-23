@@ -14,12 +14,12 @@ export function createScene() {
   // Camera — WebXR overrides projection + view matrices in AR mode
   // Fallback position for non-AR / AR.js Phase 1
   const camera = new THREE.PerspectiveCamera(
-    70,
+    71,
     window.innerWidth / window.innerHeight,
     0.01,
     100
   );
-  camera.position.set(0, 1.6, 3);
+  camera.position.set(0, 1.0, 3);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setPixelRatio(window.devicePixelRatio);
