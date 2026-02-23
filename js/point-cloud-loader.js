@@ -21,12 +21,16 @@ const POINT_VERTEX_SHADER = /* glsl */ `
 
 const POINT_FRAGMENT_SHADER = /* glsl */ `
   varying vec3 vColor;
+  uniform float uEmissiveIntensity;
 
   void main() {
     float dist = length(gl_PointCoord - vec2(0.5));
     if (dist > 0.5) discard;
     float alpha = 1.0 - smoothstep(0.35, 0.5, dist);
-    gl_FragColor = vec4(vColor, alpha);
+    
+    // Add emissive glow
+    vec3 emissiveColor = vColor * uEmissiveIntensity;
+    gl_FragColor = vec4(vColor + emissiveColor, alpha);
   }
 `;
 
@@ -112,6 +116,7 @@ export async function loadPointCloud(url, options = {}) {
     fragmentShader: POINT_FRAGMENT_SHADER,
     uniforms: {
       uPointSize: { value: pointSize },
+      uEmissiveIntensity: { value: 0.3 }, // Subtle emissive glow
     },
     transparent: true,
     depthWrite: false,

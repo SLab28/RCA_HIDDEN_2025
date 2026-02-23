@@ -4,29 +4,30 @@
 import * as THREE from 'three';
 
 /**
- * Creates flocking animation for surface points only
- * Surface points move as a coordinated flock like fireflies
+ * Creates flocking animation for all tree points
+ * All points move as a coordinated flock like fireflies
  */
 export class FloatingAnimation {
   constructor(points, options = {}) {
     this.points = points;
     this.geometry = points.geometry;
     this.originalPositions = null;
-    this.surfacePoints = null; // Indices of surface points only
-    this.boids = null; // Flocking data for each surface point
+    // this.surfacePoints = null; // Removed - using all points
+    this.sampledIndices = null; // Sampled point indices for performance
+    this.boids = null; // Flocking data for each point
     this.isActive = false;
     this.startTime = null;
     this.clock = new THREE.Clock();
     
     // Flocking parameters
     this.config = {
-      maxSpeed: 0.02,        // Very slow movement (2cm/s)
-      maxForce: 0.001,       // Gentle steering forces
-      neighborRadius: 0.5,   // 50cm perception radius
-      separationRadius: 0.15, // 15cm personal space
-      alignmentWeight: 0.8,  // Strong alignment
-      cohesionWeight: 0.3,   // Moderate cohesion
-      separationWeight: 1.2, // Strong separation
+      maxSpeed: 0.015,       // Slower movement for tighter groups
+      maxForce: 0.002,       // Stronger steering forces
+      neighborRadius: 0.8,   // 80cm perception radius (larger groups)
+      separationRadius: 0.12, // 12cm personal space (tighter groups)
+      alignmentWeight: 1.2,  // Very strong alignment
+      cohesionWeight: 0.8,   // Strong cohesion
+      separationWeight: 0.8, // Moderate separation
       windStrength: 0.005,  // Very gentle wind
       delay: 3000,          // 3 seconds before effect starts
       fadeInDuration: 2000, // 2 seconds fade-in
@@ -52,75 +53,23 @@ export class FloatingAnimation {
     const positions = this.geometry.attributes.position;
     this.originalPositions = new Float32Array(positions.array);
     
-    // Identify surface points (async to prevent blocking)
-    try {
-      this.surfacePoints = this.identifySurfacePoints(positions);
-      console.log(`[FloatingAnimation] Found ${this.surfacePoints.length} surface points out of ${positions.count}`);
-      
-      // Create boids for surface points only
-      this.boids = this.createBoids(this.surfacePoints.length);
-      
-      console.log(`[FloatingAnimation] Flocking system initialized successfully`);
-    } catch (err) {
-      console.error('[FloatingAnimation] Initialization failed:', err);
-      // Fallback: use all points if surface detection fails
-      this.surfacePoints = Array.from({length: positions.count}, (_, i) => i);
-      this.boids = this.createBoids(this.surfacePoints.length);
-      console.log('[FloatingAnimation] Fallback: using all points for animation');
+    // Sample points for animation to prevent crashes with large point clouds
+    const maxPoints = 5000; // Limit to 5000 points for performance
+    const sampleRate = Math.ceil(positions.count / maxPoints);
+    this.sampledIndices = [];
+    
+    for (let i = 0; i < positions.count; i += sampleRate) {
+      this.sampledIndices.push(i);
     }
+    
+    this.boids = this.createBoids(this.sampledIndices.length);
+    console.log(`[FloatingAnimation] Using ${this.sampledIndices.length} sampled points out of ${positions.count} for flocking animation`);
+    console.log(`[FloatingAnimation] Sample rate: 1 in ${sampleRate}`);
+    console.log(`[FloatingAnimation] Flocking system initialized successfully`);
   }
   
   /**
-   * Identify surface points using optimized neighbor density analysis
-   * Surface points have fewer neighbors than interior points
-   */
-  identifySurfacePoints(positions) {
-    const surfaceIndices = [];
-    const pointCount = positions.count;
-    const searchRadius = 0.1; // 10cm search radius
-    const maxNeighbors = 6; // Threshold for surface detection
-    
-    console.log(`[FloatingAnimation] Analyzing ${pointCount} points for surface detection...`);
-    
-    // Sample every Nth point for performance (large point clouds)
-    const sampleRate = pointCount > 10000 ? 10 : 1;
-    
-    for (let i = 0; i < pointCount; i += sampleRate) {
-      const pos = new THREE.Vector3(
-        positions.array[i * 3],
-        positions.array[i * 3 + 1],
-        positions.array[i * 3 + 2]
-      );
-      
-      // Count neighbors within search radius (optimized)
-      let neighborCount = 0;
-      const searchRadiusSq = searchRadius * searchRadius;
-      
-      for (let j = 0; j < pointCount; j += sampleRate) {
-        if (i === j) continue;
-        
-        const dx = positions.array[j * 3] - pos.x;
-        const dy = positions.array[j * 3 + 1] - pos.y;
-        const dz = positions.array[j * 3 + 2] - pos.z;
-        const distSq = dx * dx + dy * dy + dz * dz;
-        
-        if (distSq < searchRadiusSq) {
-          neighborCount++;
-        }
-      }
-      
-      // Surface points have fewer neighbors
-      if (neighborCount < maxNeighbors) {
-        surfaceIndices.push(i);
-      }
-    }
-    
-    console.log(`[FloatingAnimation] Surface detection complete: ${surfaceIndices.length} surface points`);
-    return surfaceIndices;
-  }
-  
-  /**
-   * Create boid data for each surface point
+   * Create boid data for each point
    */
   createBoids(count) {
     const boids = [];
@@ -159,7 +108,7 @@ export class FloatingAnimation {
    * Update flocking animation (call in render loop)
    */
   update() {
-    if (!this.isActive || !this.originalPositions || !this.surfacePoints || !this.boids) {
+    if (!this.isActive || !this.originalPositions || !this.boids) {
       return;
     }
     
@@ -182,9 +131,9 @@ export class FloatingAnimation {
     // Update boid positions and apply flocking
     this.updateFlocking(animationTime);
     
-    // Apply boid positions to surface points only
-    for (let i = 0; i < this.surfacePoints.length; i++) {
-      const pointIndex = this.surfacePoints[i];
+    // Apply boid positions to sampled points only
+    for (let i = 0; i < this.boids.length; i++) {
+      const pointIndex = this.sampledIndices[i];
       const posIndex = pointIndex * 3;
       const boid = this.boids[i];
       
@@ -245,15 +194,20 @@ export class FloatingAnimation {
       
       boid.position.add(boid.velocity);
       
-      // Add gentle wind
+      // Add upward wind force with turbulence
       const windX = Math.sin(deltaTime * 0.1 + i) * this.config.windStrength;
+      const windY = Math.sin(deltaTime * 0.15 + i * 0.5) * this.config.windStrength * 0.5 + 0.003; // Upward bias + turbulence
       const windZ = Math.cos(deltaTime * 0.08 + i) * this.config.windStrength;
       boid.position.x += windX;
+      boid.position.y += windY;
       boid.position.z += windZ;
       
-      // Keep boids relatively close to original position
-      const maxOffset = 0.3; // 30cm max offset
-      boid.position.clampLength(0, maxOffset);
+      // Keep boids relatively close to original position but allow more upward movement
+      const maxOffset = 0.4; // 40cm max offset
+      const maxY = 0.5; // Allow 50cm upward movement
+      boid.position.x = Math.max(-maxOffset, Math.min(maxOffset, boid.position.x));
+      boid.position.y = Math.max(-0.1, Math.min(maxY, boid.position.y)); // More upward range
+      boid.position.z = Math.max(-maxOffset, Math.min(maxOffset, boid.position.z));
     }
   }
   
@@ -397,7 +351,8 @@ export class FloatingAnimation {
   dispose() {
     this.stop();
     this.originalPositions = null;
-    this.surfacePoints = null;
+    // this.surfacePoints = null; // Removed - using all points
+    this.sampledIndices = null;
     this.boids = null;
     this.geometry = null;
     this.points = null;
