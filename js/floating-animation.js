@@ -125,7 +125,7 @@ export class FloatingAnimation {
     this.lastFrameTime = performance.now();
     
     const currentTime = this.clock.getElapsedTime() * 1000; // Convert to ms
-    const elapsed = currentTime - (this.startTime ? this.startTime - performance.now() + currentTime : 0);
+    const elapsed = currentTime - (this.startTime || 0);
     
     // No delay - start immediately
     // if (elapsed < this.config.delay) {

@@ -9,6 +9,7 @@ let referenceSpace = null;
 let _onFrame = null;
 let _reticle = null;
 let _currentHitPose = null;
+let wakeLockSentinel = null; // Store wake lock for cleanup
 
 /**
  * Check if immersive-ar is supported on this device.
@@ -126,9 +127,10 @@ export async function startWebXRSession(renderer, scene, camera, callbacks = {})
     throw err;
   }
 
-  // Get reference space with fallback logic for emulator compatibility
+  // Get reference space with fallback logic for mobile compatibility
   async function getReferenceSpace(session) {
-    const types = ['local-floor', 'local', 'viewer']; // in order of preference
+    // Prefer 'local' for mobile compatibility, then 'local-floor', then 'viewer'
+    const types = ['local', 'local-floor', 'viewer']; // mobile-first order
     for (const type of types) {
       try {
         const refSpace = await session.requestReferenceSpace(type);
@@ -194,6 +196,10 @@ export async function startWebXRSession(renderer, scene, camera, callbacks = {})
     hitTestSource = null;
     referenceSpace = null;
     _currentHitPose = null;
+    
+    // Release wake lock when session ends
+    releaseWakeLock();
+    
     if (callbacks.onSessionEnd) callbacks.onSessionEnd();
   });
 
@@ -216,23 +222,40 @@ export async function startWebXRSession(renderer, scene, camera, callbacks = {})
           }
           _reticle.visible = true;
           
-          // Simple position setting - the ring is already flat on floor
+          // Position reticle on detected surface
+          const adjustedY = pose.transform.position.y; // No adjustment - use original floor level
           _reticle.position.set(
             pose.transform.position.x,
-            pose.transform.position.y,
+            adjustedY,
             pose.transform.position.z
           );
           
-          // Use the hit pose orientation directly (ring is already rotated flat)
-          _reticle.quaternion.set(
+          // Align reticle with surface normal and lay flat on floor
+          // The hit pose orientation represents the detected surface orientation
+          const hitQuaternion = new THREE.Quaternion(
             pose.transform.orientation.x,
             pose.transform.orientation.y,
             pose.transform.orientation.z,
             pose.transform.orientation.w
           );
+          
+          // Apply the surface orientation to the reticle
+          _reticle.quaternion.copy(hitQuaternion);
+          
+          // Ensure the reticle lies flat by applying an additional -90° rotation on X axis
+          // This makes the square face-up on the detected surface
+          const flatRotation = new THREE.Quaternion().setFromAxisAngle(
+            new THREE.Vector3(1, 0, 0), 
+            -Math.PI / 2
+          );
+          _reticle.quaternion.multiplyQuaternions(flatRotation, _reticle.quaternion);
 
           _currentHitPose = {
-            position: pose.transform.position,
+            position: {
+              x: pose.transform.position.x,
+              y: pose.transform.position.y, // Use original Y for tree placement
+              z: pose.transform.position.z
+            },
             orientation: pose.transform.orientation,
             matrix: pose.transform.matrix,
           };
@@ -248,6 +271,11 @@ export async function startWebXRSession(renderer, scene, camera, callbacks = {})
       console.log('[WebXR] No hit-test source or reticle');
     }
 
+    // Update floating animation if available
+    if (window.updateAnimations) {
+      window.updateAnimations();
+    }
+    
     renderer.render(scene, camera);
   };
 
@@ -286,14 +314,37 @@ export async function requestWakeLock() {
     return null;
   }
   try {
+    // Release any existing wake lock
+    if (wakeLockSentinel) {
+      await wakeLockSentinel.release();
+      wakeLockSentinel = null;
+    }
+    
     const sentinel = await navigator.wakeLock.request('screen');
+    wakeLockSentinel = sentinel;
     console.log('[WebXR] Wake lock acquired');
     sentinel.addEventListener('release', () => {
       console.log('[WebXR] Wake lock released');
+      wakeLockSentinel = null;
     });
     return sentinel;
   } catch (err) {
     console.warn('[WebXR] Wake lock failed:', err);
     return null;
+  }
+}
+
+/**
+ * Release the wake lock if active.
+ */
+export async function releaseWakeLock() {
+  if (wakeLockSentinel) {
+    try {
+      await wakeLockSentinel.release();
+      console.log('[WebXR] Wake lock manually released');
+      wakeLockSentinel = null;
+    } catch (err) {
+      console.warn('[WebXR] Failed to release wake lock:', err);
+    }
   }
 }

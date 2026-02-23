@@ -28,6 +28,7 @@ let scene, camera, renderer;
 let treeData = null;
 let treePlaced = false;
 let floatingAnimation = null;
+let isFadingIn = false; // Track fade-in state to prevent race conditions
 
 // --- UI helpers ---
 const ui = {
@@ -211,6 +212,16 @@ function placeTree(hitPose) {
 
   scene.add(points);
   console.log('[HIDDEN] Tree added to scene, total children:', scene.children.length);
+  
+  // Debug tree size
+  const bbox = new THREE.Box3().setFromObject(points);
+  const size = new THREE.Vector3();
+  bbox.getSize(size);
+  console.log('[HIDDEN] Tree bounding box:', size.x.toFixed(2), 'x', size.y.toFixed(2), 'x', size.z.toFixed(2), 'metres');
+  console.log('[HIDDEN] Tree scale:', points.scale.x.toFixed(2), points.scale.y.toFixed(2), points.scale.z.toFixed(2));
+  
+  // Start base-to-top fade-in animation
+  startTreeFadeIn(treeData.material);
 
   // Initialize floating animation after a short delay to prevent blocking
   setTimeout(() => {
@@ -285,9 +296,58 @@ async function startMarkerAnchoredMode() {
 // Global animation update
 // ─────────────────────────────────────────────
 function updateAnimations() {
-  if (floatingAnimation) {
+  // Don't update floating animation during fade-in to prevent race conditions
+  if (floatingAnimation && !isFadingIn) {
     floatingAnimation.update();
   }
+}
+
+/**
+ * Start base-to-top fade-in animation for tree
+ */
+function startTreeFadeIn(material) {
+  if (!material || !material.uniforms || !material.uniforms.uFadeProgress) {
+    console.warn('[HIDDEN] No material with uFadeProgress uniform found for fade-in');
+    return;
+  }
+  
+  // Cancel any existing fade animation
+  if (window.fadeAnimationFrameId) {
+    cancelAnimationFrame(window.fadeAnimationFrameId);
+    window.fadeAnimationFrameId = null;
+  }
+  
+  // Set fade-in state
+  isFadingIn = true;
+  
+  // Start hidden (fade progress = 0)
+  material.uniforms.uFadeProgress.value = 0.0;
+  
+  const fadeDuration = 3000; // 3 seconds fade-in
+  const startTime = performance.now();
+  
+  function updateFade() {
+    const elapsed = performance.now() - startTime;
+    const progress = Math.min(elapsed / fadeDuration, 1.0);
+    
+    // Ease-in-out cubic for smooth animation
+    const easedProgress = progress < 0.5 
+      ? 4 * progress * progress * progress 
+      : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+    
+    material.uniforms.uFadeProgress.value = easedProgress;
+    
+    if (progress < 1.0) {
+      window.fadeAnimationFrameId = requestAnimationFrame(updateFade);
+    } else {
+      console.log('[HIDDEN] Tree fade-in complete');
+      isFadingIn = false;
+      window.fadeAnimationFrameId = null;
+    }
+  }
+  
+  updateFade();
+  console.log('[HIDDEN] Starting tree base-to-top fade-in (3s)');
 }
 
 // Make globally available for WebXR render loop
