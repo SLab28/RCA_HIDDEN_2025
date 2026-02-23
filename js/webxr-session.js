@@ -111,6 +111,19 @@ export async function startWebXRSession(renderer, scene, camera, callbacks = {})
   if (arOverlay) arOverlay.classList.remove('hidden');
   if (arStatus) arStatus.textContent = 'Scanning floor…';
 
+  // Prevent anything from hiding the DOM overlay root during WebXR
+  let overlayObserver = null;
+  if (arOverlay) {
+    overlayObserver = new MutationObserver(() => {
+      if (arOverlay.style.display === 'none' || arOverlay.classList.contains('hidden')) {
+        arOverlay.classList.remove('hidden');
+        arOverlay.style.display = '';
+        console.warn('[WebXR] Prevented DOM overlay root from being hidden');
+      }
+    });
+    overlayObserver.observe(arOverlay, { attributes: true, attributeFilter: ['class', 'style'] });
+  }
+
   // Enable XR on renderer now (not earlier — interferes with Phase 1 canvas)
   renderer.xr.enabled = true;
 
@@ -200,6 +213,18 @@ export async function startWebXRSession(renderer, scene, camera, callbacks = {})
     // Release wake lock when session ends
     releaseWakeLock();
     
+    // Disconnect overlay observer
+    if (overlayObserver) {
+      overlayObserver.disconnect();
+    }
+    
+    // Restore DOM overlay root visibility for potential re-entry
+    if (arOverlay) {
+      arOverlay.style.opacity = '';
+      arOverlay.style.pointerEvents = '';
+      arOverlay.style.transition = '';
+    }
+    
     if (callbacks.onSessionEnd) callbacks.onSessionEnd();
   });
 
@@ -268,7 +293,7 @@ export async function startWebXRSession(renderer, scene, camera, callbacks = {})
         _currentHitPose = null;
       }
     } else {
-      console.log('[WebXR] No hit-test source or reticle');
+      // After tree placement, both are null — this is expected, no logging needed
     }
 
     // Update floating animation if available

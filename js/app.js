@@ -19,7 +19,7 @@ import { FloatingAnimation } from './floating-animation.js';
 
 console.log('[HIDDEN] AR app initialising');
 
-const TREE_PLY_URL = 'assets/St_John_Tree_point_cloud_niagara_yup_green_4k_points.ply';
+const TREE_PLY_URL = 'assets/St_John_Tree_point_cloud_niagara_yup_subsampled.ply';
 const TREE_FOOTPRINT_M = 2.0; // tree base always fills 2 × 2 m (real-world metres)
 
 const MODE = new URLSearchParams(window.location.search).get('mode') || 'auto';
@@ -237,12 +237,16 @@ function placeTree(hitPose) {
   // Stop hit-testing
   stopHitTest();
 
-  // Fade out AR status
+  // Fade out AR status — but NEVER set display:none on the DOM overlay root
+  // The DOM overlay root must remain in the DOM and visible (even if empty)
+  // during the entire WebXR session, or Chrome kills the compositing pipeline
   setArStatus('');
-  setTimeout(() => {
-    const arOverlay = ui.arOverlay();
-    if (arOverlay) arOverlay.classList.add('hidden');
-  }, 1000);
+  const arOverlay = ui.arOverlay();
+  if (arOverlay) {
+    arOverlay.style.pointerEvents = 'none';
+    arOverlay.style.opacity = '0';
+    arOverlay.style.transition = 'opacity 0.5s ease';
+  }
 
   console.log(`[HIDDEN] Tree placed at (${hitPose.position.x.toFixed(2)}, ${hitPose.position.y.toFixed(2)}, ${hitPose.position.z.toFixed(2)})`);
 }
