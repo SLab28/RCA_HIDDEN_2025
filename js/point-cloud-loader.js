@@ -8,10 +8,28 @@ import { PLYLoader } from 'three/addons/loaders/PLYLoader.js';
 const POINT_VERTEX_SHADER = /* glsl */ `
   attribute vec3 color;
   varying vec3 vColor;
+  varying float vFadeAlpha;
   uniform float uPointSize;
+  uniform float uFadeProgress; // 0.0 to 1.0
+  uniform float uTreeHeight;
 
   void main() {
     vColor = color;
+    
+    // Calculate base-to-top fade based on Y position
+    float normalizedHeight = position.y / uTreeHeight; // 0.0 at base, 1.0 at top
+    float fadeThreshold = uFadeProgress;
+    
+    // Point is visible if its height is below the fade threshold
+    vFadeAlpha = 1.0;
+    if (normalizedHeight > fadeThreshold) {
+      vFadeAlpha = 0.0;
+    } else if (normalizedHeight > fadeThreshold - 0.1) {
+      // Smooth transition over 10% of tree height
+      float transition = (fadeThreshold - normalizedHeight) / 0.1;
+      vFadeAlpha = smoothstep(0.0, 1.0, transition);
+    }
+    
     vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
     gl_PointSize = uPointSize * (300.0 / -mvPosition.z);
     gl_PointSize = clamp(gl_PointSize, 1.0, 64.0);
@@ -21,12 +39,16 @@ const POINT_VERTEX_SHADER = /* glsl */ `
 
 const POINT_FRAGMENT_SHADER = /* glsl */ `
   varying vec3 vColor;
+  varying float vFadeAlpha;
   uniform float uEmissiveIntensity;
 
   void main() {
     float dist = length(gl_PointCoord - vec2(0.5));
     if (dist > 0.5) discard;
     float alpha = 1.0 - smoothstep(0.35, 0.5, dist);
+    
+    // Apply base-to-top fade
+    alpha *= vFadeAlpha;
     
     // Add emissive glow
     vec3 emissiveColor = vColor * uEmissiveIntensity;
@@ -116,7 +138,9 @@ export async function loadPointCloud(url, options = {}) {
     fragmentShader: POINT_FRAGMENT_SHADER,
     uniforms: {
       uPointSize: { value: pointSize },
-      uEmissiveIntensity: { value: 0.3 }, // Subtle emissive glow
+      uEmissiveIntensity: { value: 0.8 }, // Stronger emissive glow for firefly effect
+      uFadeProgress: { value: 0.0 }, // 0.0 = hidden, 1.0 = fully visible
+      uTreeHeight: { value: 0.0 }, // Will be set after geometry is computed
     },
     transparent: true,
     depthWrite: false,
@@ -129,6 +153,16 @@ export async function loadPointCloud(url, options = {}) {
   const finalSize = new THREE.Vector3();
   geometry.boundingBox.getSize(finalSize);
   console.log(`[PointCloud] Final size: ${finalSize.x.toFixed(2)} × ${finalSize.y.toFixed(2)} × ${finalSize.z.toFixed(2)}m`);
+  
+  // Set tree height uniform for base-to-top fade animation
+  material.uniforms.uTreeHeight.value = finalSize.y;
+  
+  // Reduce emissive intensity for mobile performance
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  if (isMobile) {
+    material.uniforms.uEmissiveIntensity.value = 0.4; // Lower intensity for mobile
+    console.log('[PointCloud] Mobile detected: reduced emissive intensity for performance');
+  }
 
-  return { points, originalPositions, geometry };
+  return { points, originalPositions, geometry, material };
 }

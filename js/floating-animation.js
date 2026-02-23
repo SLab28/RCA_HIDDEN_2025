@@ -15,6 +15,7 @@ export class FloatingAnimation {
     // this.surfacePoints = null; // Removed - using all points
     this.sampledIndices = null; // Sampled point indices for performance
     this.boids = null; // Flocking data for each point
+    this.lastFrameTime = null; // Performance monitoring
     this.isActive = false;
     this.startTime = null;
     this.clock = new THREE.Clock();
@@ -29,8 +30,8 @@ export class FloatingAnimation {
       cohesionWeight: 0.8,   // Strong cohesion
       separationWeight: 0.8, // Moderate separation
       windStrength: 0.005,  // Very gentle wind
-      delay: 3000,          // 3 seconds before effect starts
-      fadeInDuration: 2000, // 2 seconds fade-in
+      delay: 0,             // No delay - start immediately
+      fadeInDuration: 1000, // 1 second fade-in (faster)
       surfaceThreshold: 0.02, // Distance threshold for surface detection
       ...options
     };
@@ -53,14 +54,19 @@ export class FloatingAnimation {
     const positions = this.geometry.attributes.position;
     this.originalPositions = new Float32Array(positions.array);
     
+    // Detect mobile device for performance optimization
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    const maxPoints = isMobile ? 1500 : 5000; // Much lower for mobile
+    
     // Sample points for animation to prevent crashes with large point clouds
-    const maxPoints = 5000; // Limit to 5000 points for performance
     const sampleRate = Math.ceil(positions.count / maxPoints);
     this.sampledIndices = [];
     
     for (let i = 0; i < positions.count; i += sampleRate) {
       this.sampledIndices.push(i);
     }
+    
+    console.log(`[FloatingAnimation] ${isMobile ? 'Mobile' : 'Desktop'} detected: using ${this.sampledIndices.length} sampled points out of ${positions.count}`);
     
     this.boids = this.createBoids(this.sampledIndices.length);
     console.log(`[FloatingAnimation] Using ${this.sampledIndices.length} sampled points out of ${positions.count} for flocking animation`);
@@ -112,13 +118,19 @@ export class FloatingAnimation {
       return;
     }
     
+    // Performance monitoring - skip frames if needed
+    if (this.lastFrameTime && performance.now() - this.lastFrameTime < 16) {
+      return; // Skip frame if running too fast (mobile optimization)
+    }
+    this.lastFrameTime = performance.now();
+    
     const currentTime = this.clock.getElapsedTime() * 1000; // Convert to ms
     const elapsed = currentTime - (this.startTime ? this.startTime - performance.now() + currentTime : 0);
     
-    // Check if 3s delay has passed
-    if (elapsed < this.config.delay) {
-      return;
-    }
+    // No delay - start immediately
+    // if (elapsed < this.config.delay) {
+    //   return;
+    // }
     
     const animationTime = (elapsed - this.config.delay) / 1000; // Convert to seconds
     
