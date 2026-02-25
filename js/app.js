@@ -19,7 +19,7 @@ import { FloatingAnimation } from './floating-animation.js';
 
 console.log('[HIDDEN] AR app initialising');
 
-const TREE_PLY_URL = 'assets/St_John_Tree_point_cloud_niagara_yup_subsampled.ply';
+const TREE_PLY_URL = 'assets/stjohn_originbase.ply';
 const TREE_FOOTPRINT_M = 8.0; // tree base always fills 8 × 8 m (real-world metres)
 
 const MODE = new URLSearchParams(window.location.search).get('mode') || 'auto';
@@ -64,6 +64,8 @@ function typeText(text, element, speed = 80) {
       return;
     }
     
+    // Note: Centering is handled by CSS for the AR status element
+    
     const sentences = text.split('. ');
     let currentSentenceIndex = 0;
     
@@ -88,10 +90,10 @@ function typeText(text, element, speed = 80) {
           
           setTimeout(typeChar, delay);
         } else {
-          // Sentence complete, wait then fade out
+          // Sentence complete, wait then fade out - SHORTER DELAY for introduction text
           setTimeout(() => {
             fadeOutAndNext();
-          }, 1000);
+          }, 300); // Reduced from 1000ms to 300ms for faster transitions
         }
       }
       
@@ -304,9 +306,7 @@ function placeTree(hitPose) {
   const { points } = treeData;
 
   // Position at hit-test location (floor surface) with base on ground
-  // The tree's base is at Y=0 in its local coordinates, so we place the base at the hit pose
-  // Add small downward offset to ensure tree base sits flush with floor
-  const floorOffset = 0.05; // 5cm downward offset to ensure base touches floor
+  const floorOffset = 1.05; // Lowered by 1m (was 0.05)
   points.position.set(
     hitPose.position.x,
     hitPose.position.y - floorOffset,

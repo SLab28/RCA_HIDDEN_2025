@@ -14,7 +14,7 @@ export function createScene() {
   // Camera — WebXR overrides projection + view matrices in AR mode
   // Fallback position for non-AR / AR.js Phase 1
   const camera = new THREE.PerspectiveCamera(
-    71,
+    120, // Adjusted FOV from 71 to 120 degrees
     window.innerWidth / window.innerHeight,
     0.01,
     100
