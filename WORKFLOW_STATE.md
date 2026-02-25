@@ -7,9 +7,9 @@
 
 | Field | Value |
 |---|---|
-| Phase | CONSTRUCT |
-| Current Task | Task 4 (refactor) |
-| Status | IN_PROGRESS |
+| Phase | 1 - SHADER_INFRASTRUCTURE |
+| Current Task | Phase 1 Implementation |
+| Status | COMPLETE |
 | Blocked By | — |
 | Conda Env | `stjohn` (must be active) |
 
@@ -43,6 +43,8 @@
 | 6 | Windsurf rules in .windsurf/rules/ | Moved from root WINDSURF_RULE_*.md to proper location | 2026-02-22 |
 | 7 | Hybrid AR.js → WebXR | AR.js for marker detection only; WebXR for world-tracked persistence (no flags) | 2026-02-22 |
 | 8 | Point budget raised to ~650K | 389K tree + 259K flock subsampled, will profile in Task 9 | 2026-02-22 |
+| 9 | Shader-first architecture | Move all per-point computation to GPU, create uniforms registry | 2026-02-25 |
+| 10 | Phase 1 complete | Shader infrastructure pipeline active, trails removed (old architecture) | 2026-02-25 |
 
 ---
 

@@ -6,7 +6,7 @@
 // Phase 2: WebXR immersive-ar session with hit-test (world-tracked tree)
 
 import * as THREE from 'three';
-import { createScene } from './scene.js';
+import { createScene, updateUniforms, renderBackground } from './scene.js';
 import { loadPointCloud } from './point-cloud-loader.js';
 import { startMarkerTracking, waitForMarkerDetection } from './marker-tracking.js';
 import {
@@ -15,7 +15,7 @@ import {
   stopHitTest,
   requestWakeLock,
 } from './webxr-session.js';
-import { FloatingAnimation } from './floating-animation.js';
+import { FlockingAnimation } from './flocking-animation.js';
 
 console.log('[HIDDEN] AR app initialising');
 
@@ -27,7 +27,7 @@ const MODE = new URLSearchParams(window.location.search).get('mode') || 'auto';
 let scene, camera, renderer;
 let treeData = null;
 let treePlaced = false;
-let floatingAnimation = null;
+let flockingAnimation = null;
 let isFadingIn = false; // Track fade-in state to prevent race conditions
 
 // --- UI helpers ---
@@ -326,14 +326,13 @@ function placeTree(hitPose) {
   // Start base-to-top fade-in animation
   startTreeFadeIn(treeData.material);
 
-  // Initialize floating animation after a short delay to prevent blocking
+  // Initialize flocking animation after a short delay to prevent blocking
   setTimeout(() => {
     try {
-      floatingAnimation = new FloatingAnimation(points);
-      floatingAnimation.start();
-      console.log('[HIDDEN] Floating animation initialized - will start in 3s with fade-in');
+      flockingAnimation = new FlockingAnimation(points);
+      flockingAnimation.start();
     } catch (err) {
-      console.error('[HIDDEN] Failed to initialize floating animation:', err);
+      console.error('[HIDDEN] Failed to initialize flocking animation:', err);
     }
   }, 100); // 100ms delay
 
@@ -387,11 +386,16 @@ async function startMarkerAnchoredMode() {
 
   function animate() {
     requestAnimationFrame(animate);
-    ar.update();
     
-    // Update floating animation
-    if (floatingAnimation) {
-      floatingAnimation.update();
+    // Update uniforms
+    updateUniforms();
+    
+    // Render background for glass refraction
+    renderBackground(renderer, scene, camera);
+    
+    // Update flocking animation
+    if (flockingAnimation && !isFadingIn) {
+      flockingAnimation.update();
     }
     
     renderer.render(scene, camera);
@@ -403,9 +407,12 @@ async function startMarkerAnchoredMode() {
 // Global animation update
 // ─────────────────────────────────────────────
 function updateAnimations() {
-  // Don't update floating animation during fade-in to prevent race conditions
-  if (floatingAnimation && !isFadingIn) {
-    floatingAnimation.update();
+  // Update all uniforms each frame
+  updateUniforms();
+  
+  // Don't update flocking animation during fade-in to prevent race conditions
+  if (flockingAnimation && !isFadingIn) {
+    flockingAnimation.update();
   }
 }
 
@@ -413,8 +420,8 @@ function updateAnimations() {
  * Start base-to-top fade-in animation for tree
  */
 function startTreeFadeIn(material) {
-  if (!material || !material.uniforms || !material.uniforms.uFadeProgress) {
-    console.warn('[HIDDEN] No material with uFadeProgress uniform found for fade-in');
+  if (!material || !material.uniforms) {
+    console.warn('[HIDDEN] No material with uniforms found for fade-in');
     return;
   }
   

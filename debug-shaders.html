@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Shader Debug Test</title>
+    <style>
+        body { margin: 0; font-family: monospace; background: #000; color: #0f0; padding: 20px; }
+        .log { margin: 5px 0; font-size: 12px; }
+        .error { color: #f00; }
+        .success { color: #0f0; }
+        .warning { color: #ff0; }
+        button { padding: 10px; margin: 5px; background: #333; color: #fff; border: 1px solid #666; cursor: pointer; }
+        button:hover { background: #555; }
+    </style>
+</head>
+<body>
+    <h1>🔧 Shader Debug Console</h1>
+    <div id="log"></div>
+    
+    <button onclick="testShaderLoading()">Test Shader Loading</button>
+    <button onclick="testUniforms()">Test Uniforms</button>
+    <button onclick="testPhase2Effects()">Test Phase 2 Effects</button>
+    <button onclick="clearLog()">Clear Log</button>
+    
+    <script>
+        function log(message, type = 'log') {
+            const logDiv = document.getElementById('log');
+            const entry = document.createElement('div');
+            entry.className = `log ${type}`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logDiv.appendChild(entry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+        
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+        
+        async function testShaderLoading() {
+            log('Testing shader loading...', 'warning');
+            
+            try {
+                const [vert, frag] = await Promise.all([
+                    fetch('shaders/pointCloud.vert?t=' + Date.now()).then(r => {
+                        if (!r.ok) throw new Error('Failed to load vertex shader');
+                        return r.text();
+                    }),
+                    fetch('shaders/pointCloud.frag?t=' + Date.now()).then(r => {
+                        if (!r.ok) throw new Error('Failed to load fragment shader');
+                        return r.text();
+                    }),
+                ]);
+                
+                log(`✅ Vertex shader: ${vert.length} bytes`, 'success');
+                log(`✅ Fragment shader: ${frag.length} bytes`, 'success');
+                log(`Vertex preview: ${vert.substring(0, 50)}...`, 'log');
+                log(`Fragment preview: ${frag.substring(0, 50)}...`, 'log');
+                
+                // Check for Phase 2 features
+                if (vert.includes('uTime') && vert.includes('sizeVariation')) {
+                    log('✅ Vertex shader has Phase 2 enhancements', 'success');
+                }
+                if (frag.includes('uGlowIntensity') && frag.includes('uRefractionStrength')) {
+                    log('✅ Fragment shader has Phase 2 enhancements', 'success');
+                }
+                
+            } catch (error) {
+                log(`❌ Error: ${error.message}`, 'error');
+            }
+        }
+        
+        function testUniforms() {
+            log('Testing uniform registry...', 'warning');
+            
+            fetch('uniformsRegistry.js?t=' + Date.now())
+                .then(r => r.text())
+                .then(text => {
+                    if (text.includes('uGlowIntensity') && text.includes('uRefractionStrength')) {
+                        log('✅ Uniforms registry has Phase 2 uniforms', 'success');
+                    } else {
+                        log('❌ Missing Phase 2 uniforms', 'error');
+                    }
+                    
+                    // Count uniforms
+                    const uniformMatches = text.match(/u\w+:/g);
+                    if (uniformMatches) {
+                        log(`📊 Found ${uniformMatches.length} uniforms`, 'log');
+                    }
+                })
+                .catch(error => log(`❌ Error loading uniforms: ${error.message}`, 'error'));
+        }
+        
+        function testPhase2Effects() {
+            log('Testing Phase 2 URL parameters...', 'warning');
+            
+            const testParams = [
+                '?brightness=1.5&glowIntensity=1.2&pointSize=15&refractionStrength=0.2',
+                '?brightness=0.8&glowIntensity=0.5&pointSize=8&refractionStrength=0.1',
+                '?brightness=2.0&glowIntensity=2.0&pointSize=20&refractionStrength=0.3'
+            ];
+            
+            testParams.forEach((params, index) => {
+                log(`🔗 Test ${index + 1}: ${params}`, 'log');
+                log(`📂 Open: ${window.location.origin}${params}`, 'log');
+            });
+            
+            log('🧪 Test these URLs to verify Phase 2 visual effects', 'success');
+        }
+        
+        // Auto-run shader test on load
+        window.addEventListener('load', () => {
+            log('🚀 Shader Debug Console Ready', 'success');
+            testShaderLoading();
+        });
+    </script>
+</body>
+</html>

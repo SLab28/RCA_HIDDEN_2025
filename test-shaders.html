@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Shader Loading Test</title>
+</head>
+<body>
+    <h1>Shader Loading Test</h1>
+    <div id="output"></div>
+    <script>
+        async function testShaderLoading() {
+            const output = document.getElementById('output');
+            
+            try {
+                console.log('[Test] Starting shader load test...');
+                
+                const [vert, frag] = await Promise.all([
+                    fetch('shaders/pointCloud.vert?t=' + Date.now()).then(r => {
+                        if (!r.ok) throw new Error('Failed to load vertex shader');
+                        return r.text();
+                    }),
+                    fetch('shaders/pointCloud.frag?t=' + Date.now()).then(r => {
+                        if (!r.ok) throw new Error('Failed to load fragment shader');
+                        return r.text();
+                    }),
+                ]);
+                
+                output.innerHTML = `
+                    <h2>✅ Shader Loading Successful</h2>
+                    <p>Vertex shader: ${vert.length} bytes</p>
+                    <p>Fragment shader: ${frag.length} bytes</p>
+                    <h3>Vertex shader preview:</h3>
+                    <pre>${vert.substring(0, 200)}...</pre>
+                    <h3>Fragment shader preview:</h3>
+                    <pre>${frag.substring(0, 200)}...</pre>
+                `;
+                
+                console.log('[Test] Vertex shader:', vert.length, 'bytes');
+                console.log('[Test] Fragment shader:', frag.length, 'bytes');
+                
+            } catch (error) {
+                output.innerHTML = `
+                    <h2>❌ Shader Loading Failed</h2>
+                    <p>Error: ${error.message}</p>
+                `;
+                console.error('[Test] Error:', error);
+            }
+        }
+        
+        testShaderLoading();
+    </script>
+</body>
+</html>

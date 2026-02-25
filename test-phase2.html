@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Phase 2 Visual Quality Test</title>
+    <style>
+        body { margin: 0; font-family: Arial, sans-serif; background: #000; color: #fff; }
+        .container { padding: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #333; border-radius: 5px; }
+        .param-controls { display: flex; gap: 15px; align-items: center; flex-wrap: wrap; }
+        .param-control { display: flex; flex-direction: column; gap: 5px; }
+        label { font-size: 12px; color: #ccc; }
+        input { width: 80px; padding: 5px; background: #222; color: #fff; border: 1px solid #555; border-radius: 3px; }
+        button { padding: 10px 20px; background: #007acc; color: #fff; border: none; border-radius: 5px; cursor: pointer; }
+        button:hover { background: #005a9e; }
+        .info { font-size: 14px; color: #aaa; margin-top: 10px; }
+        .success { color: #4CAF50; }
+        .warning { color: #ff9800; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Phase 2 Visual Quality Test</h1>
+        
+        <div class="test-section">
+            <h2>🎨 Visual Enhancements</h2>
+            <div class="info">
+                <p>✅ Enhanced point size (12px default)</p>
+                <p>✅ Time-based size variation for organic feel</p>
+                <p>✅ Glass refraction with chromatic aberration</p>
+                <p>✅ Warm white glow that preserves point color</p>
+                <p>✅ Additive blending for glow accumulation</p>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h2>🎛️ Exhibition Calibration</h2>
+            <div class="param-controls">
+                <div class="param-control">
+                    <label for="brightness">Brightness</label>
+                    <input type="number" id="brightness" value="1.0" step="0.1" min="0.1" max="3.0">
+                </div>
+                <div class="param-control">
+                    <label for="glowIntensity">Glow Intensity</label>
+                    <input type="number" id="glowIntensity" value="1.0" step="0.1" min="0.0" max="3.0">
+                </div>
+                <div class="param-control">
+                    <label for="pointSize">Point Size</label>
+                    <input type="number" id="pointSize" value="12.0" step="1.0" min="1.0" max="30.0">
+                </div>
+                <div class="param-control">
+                    <label for="refractionStrength">Refraction</label>
+                    <input type="number" id="refractionStrength" value="0.15" step="0.01" min="0.0" max="0.5">
+                </div>
+            </div>
+            <button onclick="applyParams()">Apply Parameters</button>
+            <div class="info">
+                <p>URL format: <code>?brightness=1.4&glowIntensity=1.2&pointSize=15&refractionStrength=0.2</code></p>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h2>🔗 Quick Links</h2>
+            <button onclick="window.open('/?brightness=1.5&glowIntensity=1.5&pointSize=15&refractionStrength=0.2', '_blank')">High Glow Test</button>
+            <button onclick="window.open('/?brightness=0.8&glowIntensity=0.5&pointSize=8&refractionStrength=0.1', '_blank')">Subtle Test</button>
+            <button onclick="window.open('/?brightness=2.0&glowIntensity=2.0&pointSize=20&refractionStrength=0.3', '_blank')">Maximum Test</button>
+        </div>
+
+        <div class="test-section">
+            <h2>📊 Expected Results</h2>
+            <div class="info">
+                <p class="success">✅ Points should appear as soft circular orbs</p>
+                <p class="success">✅ Glass refraction should bend background</p>
+                <p class="success">✅ Chromatic aberration at point edges</p>
+                <p class="success">✅ Warm white glow preserving point colors</p>
+                <p class="success">✅ Additive blending for overlapping lights</p>
+                <p class="warning">⚠️ Background render target may show black initially</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function applyParams() {
+            const brightness = document.getElementById('brightness').value;
+            const glowIntensity = document.getElementById('glowIntensity').value;
+            const pointSize = document.getElementById('pointSize').value;
+            const refractionStrength = document.getElementById('refractionStrength').value;
+            
+            const params = `?brightness=${brightness}&glowIntensity=${glowIntensity}&pointSize=${pointSize}&refractionStrength=${refractionStrength}`;
+            window.open(window.location.origin + params, '_blank');
+        }
+
+        // Load current parameters from URL if present
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.has('brightness')) {
+            document.getElementById('brightness').value = urlParams.get('brightness');
+        }
+        if (urlParams.has('glowIntensity')) {
+            document.getElementById('glowIntensity').value = urlParams.get('glowIntensity');
+        }
+        if (urlParams.has('pointSize')) {
+            document.getElementById('pointSize').value = urlParams.get('pointSize');
+        }
+        if (urlParams.has('refractionStrength')) {
+            document.getElementById('refractionStrength').value = urlParams.get('refractionStrength');
+        }
+    </script>
+</body>
+</html>

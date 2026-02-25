@@ -296,7 +296,7 @@ export async function startWebXRSession(renderer, scene, camera, callbacks = {})
       // After tree placement, both are null — this is expected, no logging needed
     }
 
-    // Update floating animation if available
+    // Update flocking animation if available
     if (window.updateAnimations) {
       window.updateAnimations();
     }
