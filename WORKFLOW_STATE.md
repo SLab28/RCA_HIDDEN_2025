@@ -7,10 +7,10 @@
 
 | Field | Value |
 |---|---|
-| Phase | 1 - SHADER_INFRASTRUCTURE |
-| Current Task | Phase 1 Implementation |
-| Status | COMPLETE |
-| Blocked By | — |
+| Phase | 2 - GPU_SHADER_MIGRATION |
+| Current Task | Shader migration from playground complete — needs visual testing |
+| Status | IMPLEMENTATION COMPLETE — AWAITING TEST |
+| Blocked By | Local dev server test to verify visuals |
 | Conda Env | `stjohn` (must be active) |
 
 ---
@@ -23,11 +23,18 @@
 | 2. Three.js Scene | ✅ DONE | scene.js + app.js with test cube |
 | 3. AR + Marker | ✅ DONE | AR.js detection-only → WebXR world-tracked persistence |
 | 4. Point Cloud | ✅ DONE | PLYLoader, 2m footprint (metres), circular sprites, WebXR placement |
-| 5. Glow | ⬜ NOT_STARTED | |
-| 6. Touch | ⬜ NOT_STARTED | Can parallel with 7 |
-| 7. Audio Flock | ⬜ NOT_STARTED | Can parallel with 6 |
-| 8. Dissolution | ⬜ NOT_STARTED | |
-| 9. Integration | ⬜ NOT_STARTED | |
+| **S1. GPU Shader Migration** | ✅ DONE | Ported playground shaders (simplex noise, firefly drift, proximity glow) |
+| **S2. Mesh-level transforms** | ✅ DONE | Vertex positions untouched; centering/scaling via mesh transform |
+| **S3. particleRole + posOffset** | ✅ DONE | 30% fireflies (xorshift hash), posOffset zero-filled for future touch |
+| **S4. CPU boids removed** | ✅ DONE | flocking-animation.js gutted; all animation is GPU-driven |
+| **S5. Glass refraction removed** | ✅ DONE | backgroundRenderTarget removed; fragment uses proximity glow |
+| **S6. Opacity fade-in** | ✅ DONE | Simple uOpacity ramp (2s ease-in-out cubic) |
+| 5. Touch physics | ⬜ DEFERRED | posOffset attribute ready; CPU integrator not yet implemented |
+| 6. Audio reactivity | ⬜ NOT_STARTED | audioAmp uniform wired but always 0.0 |
+| 7. Integration + polish | ⬜ NOT_STARTED | |
+
+### TODO
+- **Test AdditiveBlending vs NormalBlending** once shaders are visually verified on device
 
 ---
 
@@ -45,6 +52,10 @@
 | 8 | Point budget raised to ~650K | 389K tree + 259K flock subsampled, will profile in Task 9 | 2026-02-22 |
 | 9 | Shader-first architecture | Move all per-point computation to GPU, create uniforms registry | 2026-02-25 |
 | 10 | Phase 1 complete | Shader infrastructure pipeline active, trails removed (old architecture) | 2026-02-25 |
+| 11 | GPU shader migration from playground | Ported simplex noise, firefly drift, proximity glow shaders; mesh-level transforms (no vertex rewriting) | 2026-02-28 |
+| 12 | AdditiveBlending kept for AR | Better against camera passthrough; TODO test NormalBlending later | 2026-02-28 |
+| 13 | CPU boids replaced by GPU animation | flocking-animation.js gutted; all motion in vertex shader | 2026-02-28 |
+| 14 | Simple opacity fade-in | Replaced base-to-top height fade with uOpacity ramp (2s) | 2026-02-28 |
 
 ---
 

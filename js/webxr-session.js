@@ -2,6 +2,7 @@
 // HIDDEN Exhibition · AR Point Cloud Experience
 
 import * as THREE from 'three';
+import { uniforms } from '../uniformsRegistry.js';
 
 let xrSession = null;
 let hitTestSource = null;
@@ -10,6 +11,26 @@ let _onFrame = null;
 let _reticle = null;
 let _currentHitPose = null;
 let wakeLockSentinel = null; // Store wake lock for cleanup
+let xrLightProbe = null;
+
+function updateXRLightUniforms(frame) {
+  if (!xrLightProbe || !frame) return;
+
+  const estimate = frame.getLightEstimate(xrLightProbe);
+  if (!estimate || !estimate.primaryLightIntensity) return;
+
+  const r = Math.max(estimate.primaryLightIntensity.x, 0.0001);
+  const g = Math.max(estimate.primaryLightIntensity.y, 0.0001);
+  const b = Math.max(estimate.primaryLightIntensity.z, 0.0001);
+  const avg = (r + g + b) / 3.0;
+
+  // Tone-map raw intensity to a stable range for point cloud shading.
+  const mappedIntensity = THREE.MathUtils.clamp(Math.log2(1.0 + avg) * 0.35, 0.45, 1.75);
+  uniforms.xrLightIntensity.value = mappedIntensity;
+
+  const maxChannel = Math.max(r, g, b);
+  uniforms.xrLightColor.value.set(r / maxChannel, g / maxChannel, b / maxChannel);
+}
 
 /**
  * Check if immersive-ar is supported on this device.
@@ -81,7 +102,7 @@ export async function startWebXRSession(renderer, scene, camera, callbacks = {})
 
   // Build feature lists with reference space negotiation
   const requiredFeatures = ['hit-test'];
-  const optionalFeatures = ['dom-overlay', 'local-floor', 'local', 'viewer'];
+  const optionalFeatures = ['dom-overlay', 'local-floor', 'local', 'viewer', 'light-estimation'];
   const sessionInit = {
     requiredFeatures,
     optionalFeatures,
@@ -171,6 +192,17 @@ export async function startWebXRSession(renderer, scene, camera, callbacks = {})
     console.warn('[WebXR] Hit-test not available:', err);
   }
 
+  // Light estimation (optional)
+  xrLightProbe = null;
+  try {
+    xrLightProbe = await xrSession.requestLightProbe();
+    console.log('[WebXR] Light estimation enabled');
+  } catch (err) {
+    console.warn('[WebXR] Light estimation unavailable:', err?.name || err);
+    uniforms.xrLightIntensity.value = 1.0;
+    uniforms.xrLightColor.value.set(1, 1, 1);
+  }
+
   // Create reticle and add to scene
   _reticle = createReticle(0.35);
   _currentHitPose = null;
@@ -208,7 +240,10 @@ export async function startWebXRSession(renderer, scene, camera, callbacks = {})
     xrSession = null;
     hitTestSource = null;
     referenceSpace = null;
+    xrLightProbe = null;
     _currentHitPose = null;
+    uniforms.xrLightIntensity.value = 1.0;
+    uniforms.xrLightColor.value.set(1, 1, 1);
     
     // Release wake lock when session ends
     releaseWakeLock();
@@ -296,10 +331,13 @@ export async function startWebXRSession(renderer, scene, camera, callbacks = {})
       // After tree placement, both are null — this is expected, no logging needed
     }
 
-    // Update flocking animation if available
+    // Update animation uniforms from app loop
     if (window.updateAnimations) {
       window.updateAnimations();
     }
+
+    // Update shader light response from WebXR light estimation
+    updateXRLightUniforms(frame);
     
     renderer.render(scene, camera);
   };

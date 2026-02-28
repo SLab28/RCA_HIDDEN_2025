@@ -6,7 +6,7 @@
 // Phase 2: WebXR immersive-ar session with hit-test (world-tracked tree)
 
 import * as THREE from 'three';
-import { createScene, updateUniforms, renderBackground } from './scene.js';
+import { createScene, updateUniforms } from './scene.js';
 import { loadPointCloud } from './point-cloud-loader.js';
 import { startMarkerTracking, waitForMarkerDetection } from './marker-tracking.js';
 import {
@@ -15,20 +15,17 @@ import {
   stopHitTest,
   requestWakeLock,
 } from './webxr-session.js';
-import { FlockingAnimation } from './flocking-animation.js';
+import { uniforms } from '../uniformsRegistry.js';
 
 console.log('[HIDDEN] AR app initialising');
 
 const TREE_PLY_URL = 'assets/stjohn_originbase.ply';
-const TREE_FOOTPRINT_M = 8.0; // tree base always fills 8 × 8 m (real-world metres)
 
 const MODE = new URLSearchParams(window.location.search).get('mode') || 'auto';
 
 let scene, camera, renderer;
 let treeData = null;
 let treePlaced = false;
-let flockingAnimation = null;
-let isFadingIn = false; // Track fade-in state to prevent race conditions
 
 // --- UI helpers ---
 const ui = {
@@ -160,8 +157,6 @@ async function loadAssets() {
   const t0 = performance.now();
 
   treeData = await loadPointCloud(TREE_PLY_URL, {
-    footprint: TREE_FOOTPRINT_M,
-    pointSize: 0.012,
     onProgress: (event) => {
       if (event.lengthComputable) {
         const pct = Math.min(Math.round((event.loaded / event.total) * 100), 99);
@@ -269,11 +264,7 @@ async function startWorldAR() {
       scene.remove(treeData.points);
       console.log('[HIDDEN] Removed existing tree from scene before WebXR');
     }
-    // Reset tree position to origin
-    treeData.points.position.set(0, 0, 0);
-    treeData.points.quaternion.set(0, 0, 0, 1);
-    treeData.points.scale.set(1, 1, 1);
-    console.log('[HIDDEN] Reset tree transform for WebXR');
+    console.log('[HIDDEN] Reset tree state for WebXR');
   }
 
   await startWebXRSession(renderer, scene, camera, {
@@ -305,36 +296,25 @@ function placeTree(hitPose) {
 
   const { points } = treeData;
 
-  // Position at hit-test location (floor surface) with base on ground
-  const floorOffset = 1.05; // Lowered by 1m (was 0.05)
-  points.position.set(
-    hitPose.position.x,
-    hitPose.position.y - floorOffset,
-    hitPose.position.z
-  );
+  // The mesh already has centering offset (points.position) and normalised scale
+  // from the loader. We ADD the hit-test position on top of the existing offset.
+  const floorOffset = 1.05;
+  points.position.x += hitPose.position.x;
+  points.position.y += hitPose.position.y - floorOffset;
+  points.position.z += hitPose.position.z;
 
   scene.add(points);
   console.log('[HIDDEN] Tree added to scene, total children:', scene.children.length);
-  
+
   // Debug tree size
   const bbox = new THREE.Box3().setFromObject(points);
   const size = new THREE.Vector3();
   bbox.getSize(size);
-  console.log('[HIDDEN] Tree bounding box:', size.x.toFixed(2), 'x', size.y.toFixed(2), 'x', size.z.toFixed(2), 'metres');
+  console.log('[HIDDEN] Tree bounding box:', size.x.toFixed(2), 'x', size.y.toFixed(2), 'x', size.z.toFixed(2));
   console.log('[HIDDEN] Tree scale:', points.scale.x.toFixed(2), points.scale.y.toFixed(2), points.scale.z.toFixed(2));
-  
-  // Start base-to-top fade-in animation
-  startTreeFadeIn(treeData.material);
 
-  // Initialize flocking animation after a short delay to prevent blocking
-  setTimeout(() => {
-    try {
-      flockingAnimation = new FlockingAnimation(points);
-      flockingAnimation.start();
-    } catch (err) {
-      console.error('[HIDDEN] Failed to initialize flocking animation:', err);
-    }
-  }, 100); // 100ms delay
+  // Start simple opacity fade-in
+  startOpacityFadeIn();
 
   // Stop hit-testing
   stopHitTest();
@@ -379,89 +359,56 @@ async function startMarkerAnchoredMode() {
   }
 
   if (treeData && treeData.points) {
-    // Scale tree to 5.7x marker size (2m / 0.35m ≈ 5.7)
-    treeData.points.scale.set(5.7, 5.7, 5.7);
     ar.anchorGroup.add(treeData.points);
+    uniforms.uOpacity.value = 1.0;
   }
 
   function animate() {
     requestAnimationFrame(animate);
-    
-    // Update uniforms
     updateUniforms();
-    
-    // Render background for glass refraction
-    renderBackground(renderer, scene, camera);
-    
-    // Update flocking animation
-    if (flockingAnimation && !isFadingIn) {
-      flockingAnimation.update();
-    }
-    
     renderer.render(scene, camera);
   }
   animate();
 }
 
 // ─────────────────────────────────────────────
-// Global animation update
+// Global animation update (called from WebXR render loop)
 // ─────────────────────────────────────────────
 function updateAnimations() {
-  // Update all uniforms each frame
   updateUniforms();
-  
-  // Don't update flocking animation during fade-in to prevent race conditions
-  if (flockingAnimation && !isFadingIn) {
-    flockingAnimation.update();
-  }
 }
 
 /**
- * Start base-to-top fade-in animation for tree
+ * Simple opacity fade-in: animate uOpacity from 0 → 1 over 2 seconds
  */
-function startTreeFadeIn(material) {
-  if (!material || !material.uniforms) {
-    console.warn('[HIDDEN] No material with uniforms found for fade-in');
-    return;
-  }
-  
-  // Cancel any existing fade animation
+function startOpacityFadeIn() {
   if (window.fadeAnimationFrameId) {
     cancelAnimationFrame(window.fadeAnimationFrameId);
-    window.fadeAnimationFrameId = null;
   }
-  
-  // Set fade-in state
-  isFadingIn = true;
-  
-  // Start hidden (fade progress = 0)
-  material.uniforms.uFadeProgress.value = 0.0;
-  
-  const fadeDuration = 3000; // 3 seconds fade-in
+
+  uniforms.uOpacity.value = 0.0;
+  const fadeDuration = 2000;
   const startTime = performance.now();
-  
-  function updateFade() {
+
+  function tick() {
     const elapsed = performance.now() - startTime;
-    const progress = Math.min(elapsed / fadeDuration, 1.0);
-    
-    // Ease-in-out cubic for smooth animation
-    const easedProgress = progress < 0.5 
-      ? 4 * progress * progress * progress 
-      : 1 - Math.pow(-2 * progress + 2, 3) / 2;
-    
-    material.uniforms.uFadeProgress.value = easedProgress;
-    
-    if (progress < 1.0) {
-      window.fadeAnimationFrameId = requestAnimationFrame(updateFade);
+    const t = Math.min(elapsed / fadeDuration, 1.0);
+    // Ease-in-out cubic
+    uniforms.uOpacity.value = t < 0.5
+      ? 4 * t * t * t
+      : 1 - Math.pow(-2 * t + 2, 3) / 2;
+
+    if (t < 1.0) {
+      window.fadeAnimationFrameId = requestAnimationFrame(tick);
     } else {
-      console.log('[HIDDEN] Tree fade-in complete');
-      isFadingIn = false;
+      uniforms.uOpacity.value = 1.0;
       window.fadeAnimationFrameId = null;
+      console.log('[HIDDEN] Opacity fade-in complete');
     }
   }
-  
-  updateFade();
-  console.log('[HIDDEN] Starting tree base-to-top fade-in (3s)');
+
+  tick();
+  console.log('[HIDDEN] Starting opacity fade-in (2s)');
 }
 
 // Make globally available for WebXR render loop

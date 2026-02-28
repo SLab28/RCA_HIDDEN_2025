@@ -40,20 +40,18 @@ async function loadShaders() {
 }
 
 /**
- * Load a PLY point cloud, scale to fit a target footprint (metres),
- * centre on origin with base at Y=0, and return a Points mesh.
- * Does NOT add to scene — caller decides where to place it.
+ * Load a PLY point cloud and prepare it for GPU-driven shader rendering.
+ *
+ * CRITICAL: Vertex positions are NOT modified. Centering and scaling are applied
+ * via mesh-level transforms (points.position, points.scale) so the vertex shader
+ * receives raw PLY coordinates — matching the playground's coordinate space exactly.
  *
  * @param {string} url — path to the .ply file
  * @param {object} [options]
- * @param {number} [options.footprint=2] — max width/depth in real-world metres
- * @param {number} [options.pointSize=0.012] — base point sprite size
  * @param {function} [options.onProgress] — XHR progress callback
- * @returns {Promise<{ points: THREE.Points, originalPositions: Float32Array, geometry: THREE.BufferGeometry }>}
+ * @returns {Promise<{ points: THREE.Points, geometry: THREE.BufferGeometry, material: THREE.ShaderMaterial }>}
  */
 export async function loadPointCloud(url, options = {}) {
-  const footprint = options.footprint ?? 2;
-  const pointSize = options.pointSize ?? 0.012;
   const onProgress = options.onProgress ?? null;
 
   const loader = new PLYLoader();
@@ -70,7 +68,7 @@ export async function loadPointCloud(url, options = {}) {
   const vertexCount = geometry.attributes.position.count;
   console.log(`[PointCloud] Loaded ${vertexCount} vertices from ${url}`);
 
-  // Ensure colour attribute is normalised to 0–1
+  // Ensure colour attribute exists and is normalised to 0–1
   if (geometry.attributes.color) {
     const colorArr = geometry.attributes.color.array;
     let needsNormalise = false;
@@ -84,9 +82,32 @@ export async function loadPointCloud(url, options = {}) {
       geometry.attributes.color.needsUpdate = true;
       console.log('[PointCloud] Normalised colour values from 0-255 to 0-1');
     }
+  } else {
+    // Default grey if PLY has no vertex colors
+    const c = new Float32Array(vertexCount * 3).fill(0.8);
+    geometry.setAttribute('color', new THREE.BufferAttribute(c, 3));
+    console.log('[PointCloud] No vertex colors in PLY — using default grey');
   }
 
-  // Compute bounding box for scaling and centring
+  // ── Assign particleRole attribute (30% fireflies, deterministic xorshift hash) ──
+  const roles = new Float32Array(vertexCount);
+  let seed = 0xdeadbeef;
+  for (let i = 0; i < vertexCount; i++) {
+    seed = (seed ^ (seed << 13)) >>> 0;
+    seed = (seed ^ (seed >> 17)) >>> 0;
+    seed = (seed ^ (seed << 5))  >>> 0;
+    roles[i] = (seed / 0xffffffff) < 0.30 ? 1.0 : 0.0;
+  }
+  geometry.setAttribute('particleRole', new THREE.BufferAttribute(roles, 1));
+  console.log(`[PointCloud] Assigned particleRole: ${roles.filter(v => v > 0.5).length} fireflies / ${vertexCount} total`);
+
+  // ── posOffset attribute (zero-filled, for future touch physics) ──
+  const offBuf = new Float32Array(vertexCount * 3);
+  const posOffsetAttr = new THREE.BufferAttribute(offBuf, 3);
+  posOffsetAttr.setUsage(THREE.DynamicDrawUsage);
+  geometry.setAttribute('posOffset', posOffsetAttr);
+
+  // ── Compute bounding box for mesh-level transforms ──
   geometry.computeBoundingBox();
   const bbox = geometry.boundingBox;
   const size = new THREE.Vector3();
@@ -96,60 +117,39 @@ export async function loadPointCloud(url, options = {}) {
 
   console.log(`[PointCloud] Raw bounding box: ${size.x.toFixed(2)} × ${size.y.toFixed(2)} × ${size.z.toFixed(2)}`);
 
-  // Scale to fit within footprint (metres) based on max horizontal extent
-  const maxHorizontal = Math.max(size.x, size.z);
-  const scaleFactor = maxHorizontal > 0 ? footprint / maxHorizontal : 1;
-  console.log(`[PointCloud] Scale factor: ${scaleFactor.toFixed(4)} (→ ${footprint}m footprint)`);
-
-  // Apply scale, centre horizontally, base at Y=0
-  const positions = geometry.attributes.position.array;
-  for (let i = 0; i < positions.length; i += 3) {
-    positions[i]     = (positions[i]     - centre.x) * scaleFactor;
-    positions[i + 1] = (positions[i + 1] - bbox.min.y) * scaleFactor;
-    positions[i + 2] = (positions[i + 2] - centre.z) * scaleFactor;
-  }
-  geometry.attributes.position.needsUpdate = true;
-  geometry.computeBoundingBox();
-
-  // Store original positions for animation reference (dissolve, touch, etc.)
-  const originalPositions = new Float32Array(positions.length);
-  originalPositions.set(positions);
-
-  // Load shaders and create material
+  // Load shaders
   const shaders = await loadShaders();
-  
-  // Use uniform values directly from registry (no overrides)
-  uniforms.uFadeProgress.value = 0.0; // 0.0 = hidden, 1.0 = fully visible
-  uniforms.uTreeHeight.value = 0.0; // Will be set after geometry is computed
+
+  // Start hidden for fade-in
+  uniforms.uOpacity.value = 0.0;
 
   console.log('[ShaderLoader] Creating ShaderMaterial with loaded shaders...');
-  console.log('[ShaderLoader] Uniforms count:', Object.keys(uniforms).length);
-  console.log('[ShaderLoader] Uniform names:', Object.keys(uniforms));
 
-  // Circular point sprite material (custom shader)
+  // GPU-driven point cloud material
+  // Additive blending restores color pop/glow accumulation in AR
   const material = new THREE.ShaderMaterial({
     vertexShader: shaders.vertexShader,
     fragmentShader: shaders.fragmentShader,
     uniforms: uniforms,
+    vertexColors: true,
     transparent: true,
     depthWrite: false,
-    blending: THREE.AdditiveBlending, // For glow accumulation
+    blending: THREE.AdditiveBlending,
   });
-
-  console.log('[ShaderLoader] Material created:', material.constructor.name);
-  console.log('[ShaderLoader] Vertex shader length:', material.vertexShader.length);
-  console.log('[ShaderLoader] Fragment shader length:', material.fragmentShader.length);
 
   const points = new THREE.Points(geometry, material);
   points.name = 'point-cloud';
   points.frustumCulled = false;
 
-  const finalSize = new THREE.Vector3();
-  geometry.boundingBox.getSize(finalSize);
-  console.log(`[PointCloud] Final size: ${finalSize.x.toFixed(2)} × ${finalSize.y.toFixed(2)} × ${finalSize.z.toFixed(2)}m`);
-  
-  // Set tree height uniform for base-to-top fade animation
-  uniforms.uTreeHeight.value = finalSize.y;
+  // ── Mesh-level transforms (DO NOT modify vertex positions) ──
+  // Centre the mesh so its bounding box centre is at origin
+  points.position.set(-centre.x, -centre.y, -centre.z);
+  // Normalise scale: largest axis maps to 6 world units
+  const uniformScale = 13 / Math.max(size.x, size.y, size.z);
+  points.scale.setScalar(uniformScale);
 
-  return { points, originalPositions, geometry, material };
+  console.log(`[PointCloud] Mesh offset: (${(-centre.x).toFixed(2)}, ${(-centre.y).toFixed(2)}, ${(-centre.z).toFixed(2)})`);
+  console.log(`[PointCloud] Mesh scale: ${uniformScale.toFixed(4)}`);
+
+  return { points, geometry, material };
 }

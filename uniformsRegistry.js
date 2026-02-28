@@ -1,37 +1,34 @@
 import * as THREE from 'three';
 
 export const uniforms = {
-  // Core
-  uTime:               { value: 0 },
-  uPointSize:          { value: 3.0 }, // Reduced from 6.0 (too huge)
+  // Core — updated every frame
+  time:            { value: 0 },
+  pointSize:       { value: 0.03 },
 
-  // Visual / Exhibition calibration
-  uAmbientBrightness:  { value: 0.3 },
-  uGlowIntensity:      { value: 1.0 },
-  uGlowColour:         { value: new THREE.Color(0.85, 0.95, 1.0) },
-  uRefractionStrength: { value: 0.15 },
-  uBackgroundTex:      { value: null },
+  // Noise displacement (tree body)
+  noiseScale:      { value: 2.0 },
+  noiseAmp:        { value: 0.03 },
 
-  // Flocking
-  uFlockTex:           { value: null },
-  uFlockStrength:      { value: 1.0 },
+  // Glow (fragment shader)
+  glowIntensity:   { value: 1.0 },
+  glowRadius:      { value: 0.55 },
 
-  // Audio (Phase 6+)
-  uAudioBass:          { value: 0 },
-  uAudioMid:           { value: 0 },
-  uAudioHigh:          { value: 0 },
+  // Firefly drift / flocking (vertex shader)
+  flockSpeed:      { value: 0.001 },
+  flockSpread:     { value: 8.0 },
+  driftSpeed:      { value: 0.03 },
+  driftHeight:     { value: 2.5 },
 
-  // Touch (Phase 7+)
-  uTouchPos:           { value: new THREE.Vector2() },
-  uTouchActive:        { value: 0 },
+  // Audio reactivity (Phase 6+)
+  audioAmp:        { value: 0.0 },
 
-  // Hand tracking (Phase 8+)
-  uHandPos:            { value: [new THREE.Vector3(), new THREE.Vector3()] },
-  uHandPresence:       { value: 0 },
-  uHandRadius:         { value: 0.3 },
+  // WebXR light estimation (updated per XR frame when available)
+  xrLightColor:    { value: new THREE.Color(1.0, 1.0, 1.0) },
+  xrLightIntensity:{ value: 1.0 },
 
-  // Existing uniforms from current implementation
-  uFadeProgress:       { value: 0.0 },
-  uTreeHeight:         { value: 1.0 },
-  uEmissiveIntensity:  { value: 1.0 }, // Reduced from 0.8 (too strong)
+  // Opacity for fade-in animation
+  uOpacity:        { value: 1.0 },
+
+  // TODO: test AdditiveBlending vs NormalBlending once shaders are visually verified
+  // Change blending mode in point-cloud-loader.js ShaderMaterial creation
 };
